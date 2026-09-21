@@ -8,6 +8,10 @@ Run with no arguments:
 It automatically processes every .docx in ./unformatted and writes:
     ./formatted/<name> - formatted.docx
 
+Sections with more H3 items than the template has slots are still formatted;
+every H3 title in that section is colored yellow (OVERFLOW_COLOR), and only the
+first N items (the template's slots) go into the Elementor mapping.
+
 Content mapping follows AutomationTestTemplate2.0.json:
 HeroH1, HeroP,
 Section2H2 + Section2Content1..4,
@@ -24,6 +28,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from docx import Document
+from docx.shared import RGBColor
 
 BASE_DIR = Path(__file__).resolve().parent
 INPUT_DIR = BASE_DIR / "unformatted"
@@ -32,6 +37,9 @@ SAMPLE_DIRS = (BASE_DIR / "sample formats", BASE_DIR / "sample_formats", BASE_DI
 SAMPLE_NAMES = ("Sample Format.docx", "sample format.docx")
 SECTIONS = ("services", "why", "process", "faq", "closing")
 MAX_ITEMS = {"services": 4, "why": 6, "process": 6, "faq": 6}
+# If a section has more H3 items than the template has slots, every H3 title
+# in that section is colored so the oversized section is easy to spot.
+OVERFLOW_COLOR = RGBColor(0xFF, 0xFF, 0x00)  # yellow
 
 @dataclass
 class Item:
@@ -260,10 +268,14 @@ def parse_outline(path):
     # Find the major sections first. These searches are limited by order, not
     # by H1/H2/H3 level, because source templates use mixed heading levels.
     def find_classified(start, section):
-        for i in range(start, len(rows)):
-            level, text = rows[i]
-            if level in (1, 2, 3) and classify_section(text) == section:
-                return i
+        # Prefer the shallowest heading level that matches, so an H3 item such
+        # as "Efficient Inspection Process" inside the Why section is not
+        # mistaken for the real "Our Process" H2 section.
+        for wanted in (1, 2, 3):
+            for i in range(start, len(rows)):
+                level, text = rows[i]
+                if level == wanted and classify_section(text) == section:
+                    return i
         return None
 
     why_i = find_classified(1, "why")
@@ -392,9 +404,9 @@ def parse_outline(path):
     for section in ("services", "why", "process", "faq"):
         expected = MAX_ITEMS[section]
         actual = len(o.items[section])
-        if actual != expected:
+        if actual < expected:
             raise ValueError(
-                f"{section} contains {actual} items; expected exactly {expected}."
+                f"{section} contains {actual} items; expected at least {expected}."
             )
 
     return o
@@ -403,13 +415,6 @@ def validate(o):
     """Validate constraints imposed by the Elementor template."""
     if not o.title:
         raise ValueError("HeroH1/page title is missing.")
-
-    for sec, maximum in MAX_ITEMS.items():
-        count = len(o.items[sec])
-        if count > maximum:
-            raise ValueError(
-                f"{sec} contains {count} items; template allows {maximum}."
-            )
 
     for sec in ("services", "why", "process", "faq", "closing"):
         if not o.section_titles[sec]:
@@ -422,9 +427,25 @@ def clear_body(d):
         if child is not sect:
             body.remove(child)
 
-def add(d, style, value):
+def add(d, style, value, color=None):
     p = d.add_paragraph(value)
     p.style = style
+    if color is not None:
+        for r in p.runs:
+            r.font.color.rgb = color
+    return p
+
+def overflow_count(o, section):
+    """Number of items beyond what the template has slots for."""
+    return max(0, len(o.items[section]) - MAX_ITEMS.get(section, 10**9))
+
+def add_items(d, o, section):
+    """Write H3 + body for each item; if the section is oversized, color all H3s."""
+    oversized = overflow_count(o, section) > 0
+    for x in o.items[section]:
+        add(d, "Heading 3", x.title, OVERFLOW_COLOR if oversized else None)
+        for b in x.bodies:
+            add(d, "Normal", b)
 
 def write_docx(o, sample, output):
     d = Document(str(sample))
@@ -437,36 +458,24 @@ def write_docx(o, sample, output):
     # Section 2
     if o.section_titles["services"]:
         add(d, "Heading 2", o.section_titles["services"])
-        for x in o.items["services"]:
-            add(d, "Heading 3", x.title)
-            for b in x.bodies:
-                add(d, "Normal", b)
+        add_items(d, o, "services")
 
     # Section 3
     if o.section_titles["why"]:
         add(d, "Heading 2", o.section_titles["why"])
         if o.section_subtitles["why"]:
             add(d, "Heading 3", o.section_subtitles["why"])
-        for x in o.items["why"]:
-            add(d, "Heading 3", x.title)
-            for b in x.bodies:
-                add(d, "Normal", b)
+        add_items(d, o, "why")
 
     # Section 4
     if o.section_titles["process"]:
         add(d, "Heading 2", o.section_titles["process"])
-        for x in o.items["process"]:
-            add(d, "Heading 3", x.title)
-            for b in x.bodies:
-                add(d, "Normal", b)
+        add_items(d, o, "process")
 
     # Section 5
     if o.section_titles["faq"]:
         add(d, "Heading 2", o.section_titles["faq"])
-        for x in o.items["faq"]:
-            add(d, "Heading 3", x.title)
-            for b in x.bodies:
-                add(d, "Normal", b)
+        add_items(d, o, "faq")
 
     # Section 6
     if o.section_titles["closing"]:
@@ -484,24 +493,24 @@ def mapping(o):
         "Section2H2": o.section_titles["services"],
         "Section2Content": [
             {"data-customid": f"Section2Content{i}", "title": x.title, "description": "\n".join(x.bodies)}
-            for i, x in enumerate(o.items["services"], 1)
+            for i, x in enumerate(o.items["services"][:MAX_ITEMS["services"]], 1)
         ],
         "Section3H2": o.section_titles["why"],
         "Section3H2Subtitle": o.section_subtitles["why"],
         "Section3Content": [
             {"data-customid": f"Section3Content{i}", "title": x.title, "description": "\n".join(x.bodies)}
-            for i, x in enumerate(o.items["why"], 1)
+            for i, x in enumerate(o.items["why"][:MAX_ITEMS["why"]], 1)
         ],
         "Section4H2": o.section_titles["process"],
         "Section4Content": [
             {"h3_slot": f"Section4Content{i}H3", "description_slot": f"Section4Content{i}Desc",
              "title": x.title, "description": "\n".join(x.bodies)}
-            for i, x in enumerate(o.items["process"], 1)
+            for i, x in enumerate(o.items["process"][:MAX_ITEMS["process"]], 1)
         ],
         "Section5H2": o.section_titles["faq"],
         "Section5Content": [
             {"question": x.title, "answer": "\n".join(x.bodies)}
-            for x in o.items["faq"]
+            for x in o.items["faq"][:MAX_ITEMS["faq"]]
         ],
         "Section6H2": o.section_titles["closing"],
         "Section6P": "\n".join(o.closing),
@@ -566,6 +575,13 @@ def main(argv=None):
             print(f"  Section4Content: {len(outline.items['process'])}")
             print(f"  Section5Content: {len(outline.items['faq'])}")
             print(f"  Section6P: {len(outline.closing)} paragraph(s)")
+
+            for sec in ("services", "why", "process", "faq"):
+                extra = overflow_count(outline, sec)
+                if extra:
+                    print(f"  NOTE: {sec} has {len(outline.items[sec])} items; "
+                          f"template has {MAX_ITEMS[sec]} slots; all {sec} H3 titles "
+                          f"colored yellow")
 
             if a.mapping_json:
                 print(json.dumps(mapping(outline), ensure_ascii=False, indent=2))

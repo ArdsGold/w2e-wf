@@ -1,0 +1,8 @@
+Wrote: C:\Users\Arden\Desktop\GitRep\ja\w2stuff\Formatter\formatted\Test (13).docx
+  HeroH1: 'Drone Roof Inspection in Canton'
+  HeroP: 1 paragraph(s)
+  Section2Content: 4
+  Section3Content: 6
+  Section4Content: 6
+  Section5Content: 6
+  Section6P: 2 paragraph(s)

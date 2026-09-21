@@ -2,8 +2,8 @@
 if (!defined('ABSPATH')) exit;
 
 add_action('admin_menu', function(){
-    add_menu_page('WF Bulk Pages','WF Bulk Pages','manage_options','wfebpg','wfebpg_admin','dashicons-layout',58);
-    add_submenu_page('wfebpg','Template Validator','Template Validator','manage_options','wfebpg-validator','wfebpg_template_validator');
+    add_menu_page('w2e WF','w2e WF','manage_options','wfebpg','wfebpg_admin','dashicons-layout',58);
+    add_submenu_page('w2e WF','Template Validator','Template Validator','manage_options','wfebpg-validator','wfebpg_template_validator');
 });
 add_action('admin_enqueue_scripts', function($hook){
     if (strpos($hook, 'wfebpg') === false) return;

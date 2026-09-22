@@ -36,7 +36,7 @@ function wfebpg_admin(){
     $saved_templates=wfebpg_get_saved_templates();
     ?>
 <div class="wrap wfebpg-admin"><h1>Wolf Forge Elementor Bulk Page Generator</h1>
-<?php if(isset($_GET['wfebpg_reset'])): ?><div class="notice notice-success is-dismissible"><p>Reset complete. <?php echo absint($_GET['deleted']??0); ?> generated page(s) deleted and the logs/To-Do list cleared<?php if(!empty($_GET['skipped'])): ?>. <?php echo absint($_GET['skipped']); ?> older tracked page(s) were left untouched because they were created before safe reset tracking was added<?php endif; ?>.</p></div><?php endif; ?>
+<?php if(isset($_GET['wfebpg_reset'])): ?><div class="notice notice-success is-dismissible"><p>Generated-page To-Do table cleared. No WordPress pages were deleted and logs were left unchanged.</p></div><?php endif; ?>
 <p>Upload DOCX content and an Elementor JSON template. Jobs are queued and processed in the background to reduce timeouts.</p>
 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" enctype="multipart/form-data">
 <input type="hidden" name="action" value="wfebpg_generate"><?php wp_nonce_field('wfebpg_generate'); ?>
@@ -91,7 +91,7 @@ function wfebpg_admin(){
 <?php endif; ?>
 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_process_queue_now"><?php wp_nonce_field('wfebpg_process_queue_now');?><button class="button button-primary" <?php disabled(empty($q)); ?>>Process Queue Now</button> <span class="description">Processes one queued job immediately.</span></form>
 <h2>Newly Created Pages — To-Do</h2><p>Use these links to open a generated page in WordPress or Elementor for final review and editing.</p><table class="widefat striped" style="margin-top:10px"><thead><tr><th>Created</th><th>Page</th><th>Actions</th></tr></thead><tbody><?php if(empty($created_pages)):?><tr><td colspan="3">No generated pages yet.</td></tr><?php else: foreach(array_slice($created_pages,0,100) as $cp): $cp_id=absint($cp['id']??0); if(!$cp_id)continue; ?><tr><td><?php echo esc_html($cp['time']??'');?></td><td><?php echo esc_html($cp['title']??get_the_title($cp_id));?></td><td><a class="button button-small" href="<?php echo esc_url(get_edit_post_link($cp_id));?>">Edit Page</a> <a class="button button-small" href="<?php echo esc_url(admin_url('post.php?post='.$cp_id.'&action=elementor'));?>">Edit with Elementor</a> <a href="<?php echo esc_url(get_permalink($cp_id));?>" target="_blank" rel="noopener">View</a></td></tr><?php endforeach; endif;?></tbody></table>
-<h2>Reset</h2><form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_reset_generated"><?php wp_nonce_field('wfebpg_reset_generated');?><button class="button button-secondary" style="border-color:#b32d2e;color:#b32d2e" onclick="return confirm('This will permanently delete pages created by Wolf Forge Bulk Page Generator and clear the generated-page list and logs. Overwritten existing pages will not be deleted. Continue?');">Reset Logs &amp; Generated Pages</button> <span class="description">Permanently deletes pages created by this plugin, clears their To-Do list, and clears the logs. Existing pages that were overwritten are not deleted.</span></form>
+<h2>Generated Pages Table</h2><form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_reset_generated"><?php wp_nonce_field('wfebpg_reset_generated');?><button class="button button-secondary" style="border-color:#b32d2e;color:#b32d2e" onclick="return confirm('Clear the generated-page To-Do table? No WordPress pages or logs will be deleted. Continue?');">Clear Generated Pages Table</button> <span class="description">Clears only this plugin's generated-page To-Do table. It does not delete WordPress pages or clear logs.</span></form>
 <h2>Logs</h2><form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>"><input type="hidden" name="action" value="wfebpg_clear_logs"><?php wp_nonce_field('wfebpg_clear_logs');?><button class="button">Clear Logs Only</button></form><table class="widefat striped" style="margin-top:10px"><thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead><tbody><?php if(empty($logs)):?><tr><td colspan="3">No logs.</td></tr><?php else: foreach(array_slice($logs,0,100) as $l):?><tr><td><?php echo esc_html($l['time']);?></td><td><?php echo esc_html($l['level']);?></td><td><?php echo esc_html($l['message']);?></td></tr><?php endforeach; endif;?></tbody></table>
 </div><?php
 }
@@ -313,9 +313,9 @@ function wfebpg_process_queue_now(){
 function wfebpg_clear_logs(){if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_clear_logs'))wp_die('Unauthorized.');delete_option('wfebpg_logs');wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;}
 function wfebpg_reset_generated(){
     if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_reset_generated'))wp_die('Unauthorized.');
-    $created=get_option('wfebpg_created_pages',[]);$deleted=0;$skipped=0;
-    foreach($created as $cp){$id=absint($cp['id']??0);if(!$id||get_post_type($id)!=='page')continue;$safe_generated=!empty($cp['plugin_created'])||get_post_meta($id,'_wfebpg_generated',true)==='1';if(!$safe_generated){$skipped++;continue;}if(wp_delete_post($id,true))$deleted++;}
-    delete_option('wfebpg_created_pages');delete_option('wfebpg_logs');wp_safe_redirect(add_query_arg(['page'=>'wfebpg','wfebpg_reset'=>1,'deleted'=>$deleted,'skipped'=>$skipped],admin_url('admin.php')));exit;
+    // This button only clears the plugin's To-Do table. Never delete real WordPress pages here.
+    delete_option('wfebpg_created_pages');
+    wp_safe_redirect(add_query_arg(['page'=>'wfebpg','wfebpg_reset'=>1],admin_url('admin.php')));exit;
 }
 function wfebpg_clear_templates(){
     if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_clear_templates'))wp_die('Unauthorized.');

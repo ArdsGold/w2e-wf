@@ -298,3 +298,7 @@ Version 1.12.3 changes the upload flow so Elementor JSON templates and DOCX file
 - For example, a four-card template with two final items uses the middle two card positions.
 - Existing card content, images, and alternating color behavior remain unchanged.
 
+
+
+### 1.12.6
+- Changed **Clear Generated Pages Table** so it only clears the plugin's generated-page To-Do table. It never deletes WordPress pages and does not clear logs.

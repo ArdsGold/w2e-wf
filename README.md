@@ -1,3 +1,11 @@
+
+## v1.12.4 — Stop Queueing
+
+- Added a **Stop Queueing** button to the bulk-generation form.
+- While DOCX files are being uploaded individually, the button cancels the active upload sequence and prevents the remaining files from being queued.
+- The temporary upload batch is cleaned up when queueing is stopped.
+- No generated pages are affected because the main queue submission is not completed.
+
 ## v1.12.1 — Saved Template Selector Fix
 
 - The saved JSON template selector is now always visible, including when the library is empty.
@@ -267,3 +275,26 @@ See the existing plugin history for queue processing, semantic DOCX mapping, sec
 ## Safety
 
 Install and test on staging first. Elementor JSON structures and third-party widgets can vary by Elementor version. The plugin publishes generated pages after queue processing.
+
+
+## v1.12.2 — Saved Template Selection Fix
+- Fixed saved JSON template selection so the selected filename is explicitly preserved in the generation form submission.
+- Selecting a remembered template no longer depends solely on the browser's handling of the `<select>` field.
+- New JSON uploads and same-name replacement behavior remain unchanged.
+
+## 1.12.3 — Reliable large-file uploads
+
+Version 1.12.3 changes the upload flow so Elementor JSON templates and DOCX files are uploaded individually before the generation form is submitted. This avoids PHP's `max_file_uploads` limit when many DOCX files are selected at once.
+
+- New JSON templates are uploaded and remembered automatically before queuing.
+- Previously saved JSON templates can still be selected without uploading a file.
+- Multiple DOCX files are uploaded one at a time, so batches larger than the server's normal PHP file-count limit are supported.
+- The queue form receives a temporary upload batch and copies those files into the normal job workspace before creating queued jobs.
+- Same-name JSON uploads continue to replace the saved template.
+
+## 1.12.5 — Center partial final repeatable sections
+
+- When the final repeatable section contains fewer cards than the configured section capacity, the remaining cards are centered across the prototype columns instead of starting from the far-left column.
+- For example, a four-card template with two final items uses the middle two card positions.
+- Existing card content, images, and alternating color behavior remain unchanged.
+

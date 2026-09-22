@@ -542,8 +542,19 @@ class WFEBPG_Generator {
                             $chunk_count
                         );
 
+                        // Center the cards when the final section is only partially filled.
+                        // With four prototype columns and two remaining cards, for example,
+                        // use columns 2 and 3 instead of leaving them at the far left.
+                        $source_offset = 0;
+                        if ($chunk_count < $limit && $chunk_count < $prototype_count) {
+                            $source_offset = (int) floor(($prototype_count - $chunk_count) / 2);
+                        }
+
                         for ($j = 0; $j < $chunk_count; $j++) {
-                            $source = $prototype_widgets[($section_index * $limit + $j) % $prototype_count];
+                            $source_index = $chunk_count < $limit
+                                ? ($source_offset + $j) % $prototype_count
+                                : ($section_index * $limit + $j) % $prototype_count;
+                            $source = $prototype_widgets[$source_index];
                             $copy = self::deep_clone_element($source['node']);
                             self::populate_repeatable_widget($copy, $repeatables[$cursor]);
 
@@ -569,7 +580,8 @@ class WFEBPG_Generator {
                             self::remove_unused_repeatable_columns(
                                 $section,
                                 $prototype_widgets,
-                                $chunk_count
+                                $chunk_count,
+                                $source_offset
                             );
                         }
 
@@ -626,13 +638,13 @@ class WFEBPG_Generator {
      * is its visual card: removing only the Icon Box leaves a blank image-only
      * card behind.
      */
-    private static function remove_unused_repeatable_columns(&$section, $prototype_widgets, $used_count) {
+    private static function remove_unused_repeatable_columns(&$section, $prototype_widgets, $used_count, $source_offset = 0) {
         $used_paths = [];
         $total = count($prototype_widgets);
         if ($total === 0) return;
 
         for ($j = 0; $j < $used_count; $j++) {
-            $path = $prototype_widgets[$j % $total]['column_path'] ?? null;
+            $path = $prototype_widgets[($source_offset + $j) % $total]['column_path'] ?? null;
             if ($path !== null) {
                 $used_paths[serialize($path)] = true;
             }

@@ -2,14 +2,19 @@
 if (!defined('ABSPATH')) exit;
 
 add_action('admin_menu', function(){
-    add_menu_page('w2e WF','w2e WF','manage_options','wfebpg','wfebpg_admin','dashicons-layout',58);
-    add_submenu_page('w2e WF','Template Validator','Template Validator','manage_options','wfebpg-validator','wfebpg_template_validator');
+    add_menu_page('WF Bulk Pages','WF Bulk Pages','manage_options','wfebpg','wfebpg_admin','dashicons-layout',58);
+    add_submenu_page('wfebpg','Template Validator','Template Validator','manage_options','wfebpg-validator','wfebpg_template_validator');
 });
 add_action('admin_enqueue_scripts', function($hook){
     if (strpos($hook, 'wfebpg') === false) return;
     wp_enqueue_media();
     wp_enqueue_script('jquery');
     wp_enqueue_script('wfebpg-admin', WFEBPG_URL.'assets/admin.js', ['jquery'], WFEBPG_VERSION, true);
+    wp_localize_script('wfebpg-admin', 'WFEBPG_Admin', [
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'jsonNonce' => wp_create_nonce('wfebpg_save_template'),
+        'docxNonce' => wp_create_nonce('wfebpg_upload_docx'),
+    ]);
     wp_enqueue_style('wfebpg-admin', WFEBPG_URL.'assets/admin.css', [], WFEBPG_VERSION);
 });
 add_action('admin_post_wfebpg_generate','wfebpg_handle_generate');
@@ -18,6 +23,9 @@ add_action('admin_post_wfebpg_clear_logs','wfebpg_clear_logs');
 add_action('admin_post_wfebpg_reset_generated','wfebpg_reset_generated');
 add_action('admin_post_wfebpg_rollback','wfebpg_rollback');
 add_action('admin_post_wfebpg_clear_templates','wfebpg_clear_templates');
+add_action('wp_ajax_wfebpg_save_template','wfebpg_ajax_save_template');
+add_action('wp_ajax_wfebpg_upload_docx','wfebpg_ajax_upload_docx');
+add_action('wp_ajax_wfebpg_cancel_docx_batch','wfebpg_ajax_cancel_docx_batch');
 
 function wfebpg_admin(){
     if(!current_user_can('manage_options'))return;
@@ -34,7 +42,7 @@ function wfebpg_admin(){
 <input type="hidden" name="action" value="wfebpg_generate"><?php wp_nonce_field('wfebpg_generate'); ?>
 <table class="form-table">
 <tr><th>Page Type</th><td><label><input type="radio" name="mode" value="unique" checked> Unique Pages</label> &nbsp; <label><input type="radio" name="mode" value="generic"> Generic Pages</label></td></tr>
-<tr><th>DOCX Files</th><td><input type="file" name="docx[]" accept=".docx" multiple required><p class="description">Yellow-font headings are treated as repeatable markers in Unique mode.</p></td></tr>
+<tr><th>DOCX Files</th><td><input type="file" name="docx[]" id="wfebpg-docx-upload" accept=".docx" multiple required><input type="hidden" name="docx_batch" id="wfebpg-docx-batch" value=""><p class="description">Yellow-font headings are treated as repeatable markers in Unique mode.</p></td></tr>
 <tr><th>Elementor JSON Template</th><td>
     <div class="wfebpg-template-library">
         <label for="wfebpg-saved-template"><strong>Use a previously uploaded template</strong></label><br>
@@ -44,6 +52,7 @@ function wfebpg_admin(){
                 <option value="<?php echo esc_attr($template['name']); ?>"><?php echo esc_html($template['name']); ?><?php if (!empty($template['modified'])): ?> — <?php echo esc_html(wp_date(get_option('date_format'), $template['modified'])); ?><?php endif; ?></option>
             <?php endforeach; ?>
         </select>
+        <input type="hidden" name="saved_template_choice" id="wfebpg-saved-template-choice" value="">
         <?php if (empty($saved_templates)): ?>
             <p class="description">No saved JSON templates yet. Upload one below and it will appear here for future jobs.</p>
         <?php else: ?>
@@ -73,7 +82,7 @@ function wfebpg_admin(){
 </td></tr>
 <tr><th>Parent Page</th><td><select name="parent"><option value="0">— No Parent —</option><?php foreach($pages as $p):?><option value="<?php echo esc_attr($p->ID);?>"><?php echo esc_html($p->post_title);?></option><?php endforeach;?></select></td></tr>
 <tr><th>Existing Slugs</th><td><label><input type="checkbox" name="overwrite" value="1"> Overwrite matching existing pages</label><p class="description">Otherwise a short suffix is added to avoid overwriting.</p></td></tr>
-</table><p><button class="button button-primary button-hero">Queue Pages</button></p></form>
+</table><p><button type="submit" class="button button-primary button-hero">Queue Pages</button> <button type="button" class="button" id="wfebpg-stop-queueing" style="display:none;border-color:#b32d2e;color:#b32d2e">Stop Queueing</button> <span id="wfebpg-queue-status" class="description"></span></p></form>
 <hr><h2>Queue</h2><p><strong><?php echo count($q);?></strong> job(s) waiting.</p>
 <?php $next_cron=wp_next_scheduled('wfebpg_process_queue'); if($next_cron): ?>
 <p class="description">Next WP-Cron run: <?php echo esc_html(wp_date(get_option('date_format').' '.get_option('time_format'),$next_cron)); ?></p>
@@ -171,23 +180,93 @@ function wfebpg_find_saved_template($name){
 }
 
 function wfebpg_save_template_upload($file){
-    if(empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) throw new Exception('Please select an Elementor JSON template.');
+    if (empty($file) || !isset($file['error']) || (int)$file['error'] !== UPLOAD_ERR_OK || empty($file['tmp_name']) || !is_file($file['tmp_name'])) {
+        throw new Exception('Please select an Elementor JSON template.');
+    }
     $name=sanitize_file_name(basename($file['name'] ?? 'template.json'));
     if(!$name || strtolower(pathinfo($name,PATHINFO_EXTENSION))!=='json') throw new Exception('The template must be a .json file.');
     $json=file_get_contents($file['tmp_name']);
     if($json===false) throw new Exception('Unable to read the template file.');
     WFEBPG_Template::decode($json);
     $dest=trailingslashit(wfebpg_template_library_dir()).$name;
-    if(!move_uploaded_file($file['tmp_name'],$dest)) throw new Exception('Unable to save the template.');
+    if(!move_uploaded_file($file['tmp_name'],$dest)) {
+        if(!copy($file['tmp_name'],$dest)) throw new Exception('Unable to save the template.');
+        @unlink($file['tmp_name']);
+    }
     return $dest;
+}
+
+function wfebpg_docx_batch_dir($batch){
+    if(!preg_match('/^[a-f0-9-]{36}$/i',(string)$batch)) return false;
+    $upload=wp_upload_dir();
+    return trailingslashit($upload['basedir']).'wfebpg-upload-batches/'.strtolower($batch);
+}
+
+function wfebpg_ajax_cancel_docx_batch(){
+    if(!current_user_can('manage_options') || !check_ajax_referer('wfebpg_upload_docx','nonce',false)) {
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+    $batch=sanitize_text_field(wp_unslash($_POST['batch']??''));
+    $dir=wfebpg_docx_batch_dir($batch);
+    if(!$dir || !is_dir($dir)) wp_send_json_success(['cancelled'=>false]);
+    foreach(glob(trailingslashit($dir).'*') ?: [] as $file){
+        if(is_file($file)) @unlink($file);
+    }
+    @rmdir($dir);
+    wp_send_json_success(['cancelled'=>true]);
+}
+
+function wfebpg_ajax_upload_docx(){
+    if(!current_user_can('manage_options') || !check_ajax_referer('wfebpg_upload_docx','nonce',false)) {
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+    try {
+        if(empty($_FILES['docx'])) throw new Exception('No DOCX file was received.');
+        $file=$_FILES['docx'];
+        if(!isset($file['error']) || (int)$file['error'] !== UPLOAD_ERR_OK || empty($file['tmp_name']) || !is_file($file['tmp_name'])) throw new Exception('Unable to receive the DOCX file.');
+        $name=sanitize_file_name(basename($file['name'] ?? 'document.docx'));
+        if(!$name || strtolower(pathinfo($name,PATHINFO_EXTENSION))!=='docx') throw new Exception('Only .docx files are allowed.');
+        $batch=sanitize_text_field(wp_unslash($_POST['batch']??''));
+        if(!preg_match('/^[a-f0-9-]{36}$/i',$batch)) $batch=wp_generate_uuid4();
+        $dir=wfebpg_docx_batch_dir($batch);
+        if(!$dir) throw new Exception('Invalid upload batch.');
+        if(!wp_mkdir_p($dir)) throw new Exception('Unable to create the temporary DOCX upload folder.');
+        $dest=trailingslashit($dir).$name;
+        if(file_exists($dest)) {
+            $dest=trailingslashit($dir).pathinfo($name,PATHINFO_FILENAME).'-'.wp_generate_password(6,false,false).'.docx';
+        }
+        if(!move_uploaded_file($file['tmp_name'],$dest)) {
+            if(!copy($file['tmp_name'],$dest)) throw new Exception('Unable to save the DOCX file.');
+            @unlink($file['tmp_name']);
+        }
+        wp_send_json_success(['batch'=>$batch,'name'=>basename($dest)]);
+    } catch(Throwable $e) {
+        wp_send_json_error(['message'=>$e->getMessage()],400);
+    }
+}
+
+function wfebpg_ajax_save_template(){
+    if(!current_user_can('manage_options') || !check_ajax_referer('wfebpg_save_template','nonce',false)) {
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+    try {
+        if(empty($_FILES['template'])) throw new Exception('Please select an Elementor JSON template.');
+        $path=wfebpg_save_template_upload($_FILES['template']);
+        wp_send_json_success(['name'=>basename($path)]);
+    } catch(Throwable $e) {
+        wp_send_json_error(['message'=>$e->getMessage()],400);
+    }
 }
 
 function wfebpg_handle_generate(){
     if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_generate'))wp_die('Unauthorized.');
-    if(empty($_FILES['docx']['name'][0]))wp_die('DOCX files are required.');
+    $docx_batch=sanitize_text_field(wp_unslash($_POST['docx_batch']??''));
+    $has_batch=(bool)preg_match('/^[a-f0-9-]{36}$/i',$docx_batch);
+    if(!$has_batch && empty($_FILES['docx']['name'][0]))wp_die('DOCX files are required.');
     $saved_name=sanitize_file_name(wp_unslash($_POST['saved_template']??''));
+    if (!$saved_name) $saved_name=sanitize_file_name(wp_unslash($_POST['saved_template_choice']??''));
     try{
-        if(!empty($_FILES['template']['tmp_name'])){
+        if(!empty($_FILES['template']['tmp_name']) && isset($_FILES['template']['error']) && (int)$_FILES['template']['error'] === UPLOAD_ERR_OK){
             $library_template=wfebpg_save_template_upload($_FILES['template']);
         }elseif($saved_name){
             $library_template=wfebpg_find_saved_template($saved_name);
@@ -206,7 +285,21 @@ function wfebpg_handle_generate(){
         foreach($raw as $id){$id=absint($id);if($id && get_post_type($id)==='attachment' && strpos((string)get_post_mime_type($id),'image/')===0)$image_pool_ids[]=$id;}
         $image_pool_ids=array_values(array_unique($image_pool_ids));
     }
-    foreach($_FILES['docx']['name'] as $i=>$name){if(strtolower(pathinfo($name,PATHINFO_EXTENSION))!=='docx')continue;$dest=$base.'/'.sanitize_file_name(basename($name));if(!move_uploaded_file($_FILES['docx']['tmp_name'][$i],$dest))continue;WFEBPG_Generator::enqueue(['docx'=>$dest,'template'=>$template,'mode'=>$mode,'parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'image_pool_ids'=>$image_pool_ids]);$count++;}
+    if($has_batch){
+        $batch_dir=wfebpg_docx_batch_dir($docx_batch);
+        $docx_files=$batch_dir && is_dir($batch_dir) ? (glob(trailingslashit($batch_dir).'*.docx') ?: []) : [];
+        foreach($docx_files as $source){
+            if(!is_file($source)) continue;
+            $dest=$base.'/'.basename($source);
+            if(!copy($source,$dest)) continue;
+            WFEBPG_Generator::enqueue(['docx'=>$dest,'template'=>$template,'mode'=>$mode,'parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'image_pool_ids'=>$image_pool_ids]);
+            $count++;
+        }
+        foreach($docx_files as $source) @unlink($source);
+        if($batch_dir) @rmdir($batch_dir);
+    } else {
+        foreach($_FILES['docx']['name'] as $i=>$name){if(strtolower(pathinfo($name,PATHINFO_EXTENSION))!=='docx')continue;$dest=$base.'/'.sanitize_file_name(basename($name));if(!move_uploaded_file($_FILES['docx']['tmp_name'][$i],$dest))continue;WFEBPG_Generator::enqueue(['docx'=>$dest,'template'=>$template,'mode'=>$mode,'parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'image_pool_ids'=>$image_pool_ids]);$count++;}
+    }
     if($image_pool_ids) WFEBPG_Logger::log('Image Pool attached to queued job(s): '.count($image_pool_ids).' Media Library image(s).','info');
     WFEBPG_Logger::log('Queued '.$count.' DOCX page job(s).','success');wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;
 }

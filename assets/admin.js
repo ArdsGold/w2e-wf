@@ -31,6 +31,30 @@ jQuery(function($){
         });
     }
 
+    function saveImagePool(ids){
+        if(!(window.WFEBPG_Admin && WFEBPG_Admin.ajaxUrl && WFEBPG_Admin.imagePoolNonce)) return;
+        $.post(WFEBPG_Admin.ajaxUrl, {
+            action: 'wfebpg_save_image_pool',
+            nonce: WFEBPG_Admin.imagePoolNonce,
+            image_pool_ids: ids.join(',')
+        });
+    }
+
+    function loadSavedAttachments(ids){
+        if(!ids.length) return;
+        var attachments = {};
+        var remaining = ids.length;
+        $.each(ids, function(_, id){
+            var attachment = wp.media.attachment(id);
+            attachment.fetch().done(function(){
+                attachments[id] = attachment.toJSON();
+            }).always(function(){
+                remaining--;
+                if(remaining === 0) renderSelection(attachments);
+            });
+        });
+    }
+
     function syncFrameSelection(){
         if(!frame) return;
         var ids = getIds();
@@ -40,6 +64,11 @@ jQuery(function($){
     $enabled.on('change', function(){
         $panel.toggle(this.checked);
     });
+
+    var savedIds = getIds();
+    $enabled.prop('checked', savedIds.length > 0).trigger('change');
+    renderSelection({});
+    loadSavedAttachments(savedIds);
 
     $('#wfebpg-select-images').on('click', function(e){
         e.preventDefault();
@@ -63,6 +92,7 @@ jQuery(function($){
                 ids = ids.filter(function(id,index){ return id && ids.indexOf(id) === index; });
                 $ids.val(ids.join(','));
                 renderSelection(attachments);
+                saveImagePool(ids);
             });
         }
         frame.open();
@@ -73,6 +103,7 @@ jQuery(function($){
         $ids.val('');
         renderSelection({});
         if(frame) frame.state().get('selection').reset();
+        saveImagePool([]);
     });
 
     renderSelection({});
@@ -206,7 +237,7 @@ jQuery(function($){
             var batch = $batch.val() || '';
             cleanupBatch(batch, function(){
                 $batch.val('');
-                $(form).removeData('wfebpg-upload-ready');
+                $form.removeData('wfebpg-upload-ready');
                 setQueueingState(false);
                 window.alert('Queueing stopped. No pages were queued from this submission.');
             });

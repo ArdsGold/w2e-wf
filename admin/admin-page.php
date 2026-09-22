@@ -14,6 +14,8 @@ add_action('admin_enqueue_scripts', function($hook){
         'ajaxUrl' => admin_url('admin-ajax.php'),
         'jsonNonce' => wp_create_nonce('wfebpg_save_template'),
         'docxNonce' => wp_create_nonce('wfebpg_upload_docx'),
+        'imagePoolNonce' => wp_create_nonce('wfebpg_save_image_pool'),
+        'savedImageIds' => $saved_image_ids,
     ]);
     wp_enqueue_style('wfebpg-admin', WFEBPG_URL.'assets/admin.css', [], WFEBPG_VERSION);
 });
@@ -26,6 +28,7 @@ add_action('admin_post_wfebpg_clear_templates','wfebpg_clear_templates');
 add_action('wp_ajax_wfebpg_save_template','wfebpg_ajax_save_template');
 add_action('wp_ajax_wfebpg_upload_docx','wfebpg_ajax_upload_docx');
 add_action('wp_ajax_wfebpg_cancel_docx_batch','wfebpg_ajax_cancel_docx_batch');
+add_action('wp_ajax_wfebpg_save_image_pool','wfebpg_ajax_save_image_pool');
 
 function wfebpg_admin(){
     if(!current_user_can('manage_options'))return;
@@ -34,6 +37,7 @@ function wfebpg_admin(){
     $q=get_option('wfebpg_queue',[]);
     $created_pages=get_option('wfebpg_created_pages',[]);
     $saved_templates=wfebpg_get_saved_templates();
+    $saved_image_ids=array_values(array_unique(array_filter(array_map('absint',(array)get_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',true)))));
     ?>
 <div class="wrap wfebpg-admin"><h1>Wolf Forge Elementor Bulk Page Generator</h1>
 <?php if(isset($_GET['wfebpg_reset'])): ?><div class="notice notice-success is-dismissible"><p>Generated-page To-Do table cleared. No WordPress pages were deleted and logs were left unchanged.</p></div><?php endif; ?>
@@ -72,7 +76,7 @@ function wfebpg_admin(){
     <label class="wfebpg-toggle"><input type="checkbox" name="image_pool_enabled" id="wfebpg-image-pool-enabled" value="1"> <strong>Enable Media Library Image Pool</strong></label>
     <p class="description">Unique mode: randomly assign selected Media Library images to repeatable card sections. Images are not duplicated within the same generated section.</p>
     <div id="wfebpg-image-pool-panel" class="wfebpg-image-pool-panel" style="display:none">
-        <input type="hidden" name="image_pool_ids" id="wfebpg-image-pool-ids" value="">
+        <input type="hidden" name="image_pool_ids" id="wfebpg-image-pool-ids" value="<?php echo esc_attr(implode(",",$saved_image_ids)); ?>">
         <button type="button" class="button" id="wfebpg-select-images">Select Images from Media Library</button>
         <button type="button" class="button-link-delete" id="wfebpg-clear-images" style="margin-left:10px">Clear Selection</button>
         <div id="wfebpg-image-selection-count" class="description" style="margin-top:8px">No images selected.</div>
@@ -258,6 +262,21 @@ function wfebpg_ajax_save_template(){
     }
 }
 
+function wfebpg_ajax_save_image_pool(){
+    if(!current_user_can('manage_options') || !check_ajax_referer('wfebpg_save_image_pool','nonce',false)){
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+    $raw=isset($_POST['image_pool_ids']) ? explode(',',sanitize_text_field(wp_unslash($_POST['image_pool_ids']))) : [];
+    $ids=[];
+    foreach($raw as $id){
+        $id=absint($id);
+        if($id && get_post_type($id)==='attachment' && strpos((string)get_post_mime_type($id),'image/')===0) $ids[]=$id;
+    }
+    $ids=array_values(array_unique($ids));
+    update_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',$ids);
+    wp_send_json_success(['ids'=>$ids]);
+}
+
 function wfebpg_handle_generate(){
     if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_generate'))wp_die('Unauthorized.');
     $docx_batch=sanitize_text_field(wp_unslash($_POST['docx_batch']??''));
@@ -285,6 +304,7 @@ function wfebpg_handle_generate(){
         foreach($raw as $id){$id=absint($id);if($id && get_post_type($id)==='attachment' && strpos((string)get_post_mime_type($id),'image/')===0)$image_pool_ids[]=$id;}
         $image_pool_ids=array_values(array_unique($image_pool_ids));
     }
+    update_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',$image_pool_ids);
     if($has_batch){
         $batch_dir=wfebpg_docx_batch_dir($docx_batch);
         $docx_files=$batch_dir && is_dir($batch_dir) ? (glob(trailingslashit($batch_dir).'*.docx') ?: []) : [];

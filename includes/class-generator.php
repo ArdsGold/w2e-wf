@@ -542,13 +542,10 @@ class WFEBPG_Generator {
                             $chunk_count
                         );
 
-                        // Center the cards when the final section is only partially filled.
-                        // With four prototype columns and two remaining cards, for example,
-                        // use columns 2 and 3 instead of leaving them at the far left.
+                        // Partial sections are centered geometrically, not by choosing
+                        // an existing 25% column offset. The final layout is rebuilt below
+                        // as: half-spacer + cards + half-spacer.
                         $source_offset = 0;
-                        if ($chunk_count < $limit && $chunk_count < $prototype_count) {
-                            $source_offset = (int) floor(($prototype_count - $chunk_count) / 2);
-                        }
 
                         for ($j = 0; $j < $chunk_count; $j++) {
                             $source_index = $chunk_count < $limit
@@ -577,11 +574,10 @@ class WFEBPG_Generator {
                         }
 
                         if ($chunk_count < $limit) {
-                            self::remove_unused_repeatable_columns(
+                            self::center_partial_repeatable_columns(
                                 $section,
                                 $prototype_widgets,
-                                $chunk_count,
-                                $source_offset
+                                $chunk_count
                             );
                         }
 
@@ -608,6 +604,60 @@ class WFEBPG_Generator {
         }
 
         return $found_section;
+    }
+
+    /**
+     * Center a partial repeatable row using the section's flex container.
+     *
+     * Keep the real card width from the template and remove only the unused
+     * visual columns. A scoped Elementor section class then applies
+     * justify-content:center, which centers the whole group rather than
+     * placing it in a fixed left/center/right slot.
+     */
+    private static function center_partial_repeatable_columns(&$section, $prototype_widgets, $used_count) {
+        $total = count($prototype_widgets);
+        if ($total === 0 || $used_count >= $total) return;
+
+        $cards = [];
+        $used_paths = [];
+        for ($i = 0; $i < $used_count; $i++) {
+            $source = $prototype_widgets[$i] ?? null;
+            if (!$source) return;
+            $path = $source['column_path'] ?? null;
+            if (!is_array($path) || count($path) !== 1) return;
+            $index = (int) $path[0];
+            if (!isset($section['elements'][$index]) || !is_array($section['elements'][$index])) return;
+            $used_paths[$index] = true;
+            $cards[] = $section['elements'][$index];
+        }
+
+        if (count($cards) !== $used_count) return;
+
+        $card_width = 100 / $total;
+        foreach ($cards as &$card) {
+            if (!isset($card['settings']) || !is_array($card['settings'])) $card['settings'] = [];
+            $card['settings']['_column_size'] = $card_width;
+            $card['settings']['_inline_size'] = null;
+        }
+        unset($card);
+
+        // Remove unused visual columns. The CSS class below centers the
+        // remaining 25%-wide cards as one group inside the section container.
+        $remaining = [];
+        foreach ($section['elements'] as $index => $column) {
+            if (isset($used_paths[$index])) $remaining[] = $column;
+        }
+        if (count($remaining) !== $used_count) return;
+
+        $section['elements'] = $remaining;
+        $settings = isset($section['settings']) && is_array($section['settings'])
+            ? $section['settings']
+            : [];
+        $classes = preg_split('/\s+/', trim((string) ($settings['css_classes'] ?? '')));
+        $classes = array_values(array_filter($classes));
+        if (!in_array('wfebpg-partial-centered', $classes, true)) $classes[] = 'wfebpg-partial-centered';
+        $settings['css_classes'] = implode(' ', $classes);
+        $section['settings'] = $settings;
     }
 
     /** Remove a node at an element-tree path. */
@@ -675,6 +725,78 @@ class WFEBPG_Generator {
         foreach ($unused as $path) {
             self::remove_at_path($section['elements'], $path);
         }
+    }
+
+    /**
+     * Keep the prototype's original column grid for a partial final row and
+     * clear unused card columns so they become invisible spacers.
+     *
+     * Example with four 25% columns:
+     * 3 cards -> [blank] [card] [card] [card]
+     * 2 cards -> [blank] [card] [card] [blank]
+     * 1 card  -> [blank] [blank] [card] [blank]
+     */
+    private static function clear_unused_repeatable_columns(&$section, $prototype_widgets, $used_count, $source_offset = 0) {
+        $total = count($prototype_widgets);
+        if ($total === 0 || $used_count >= $total) return;
+
+        $used = [];
+        for ($j = 0; $j < $used_count; $j++) {
+            $source = $prototype_widgets[($source_offset + $j) % $total] ?? null;
+            $path = is_array($source) ? ($source['column_path'] ?? null) : null;
+            if ($path !== null) $used[serialize($path)] = true;
+        }
+
+        foreach ($prototype_widgets as $source) {
+            $path = $source['column_path'] ?? null;
+            if ($path === null || isset($used[serialize($path)])) continue;
+
+            $column =& self::get_node_reference($section['elements'], $path);
+            if ($column === null) continue;
+
+            if (!isset($column['settings']) || !is_array($column['settings'])) {
+                $column['settings'] = [];
+            }
+
+            unset(
+                $column['settings']['background_image'],
+                $column['settings']['background_image_mobile'],
+                $column['settings']['background_color'],
+                $column['settings']['background_overlay_color'],
+                $column['settings']['background_overlay_opacity']
+            );
+
+            if (isset($column['settings']['__globals__']) && is_array($column['settings']['__globals__'])) {
+                unset(
+                    $column['settings']['__globals__']['background_color'],
+                    $column['settings']['__globals__']['background_overlay_color']
+                );
+            }
+
+            unset(
+                $column['settings']['background_background'],
+                $column['settings']['background_overlay_background']
+            );
+        }
+    }
+
+    /** Return a writable reference to an Elementor node at a path. */
+    private static function &get_node_reference(&$root, $path) {
+        $null = null;
+        $path = array_values((array) $path);
+        if (!$path) return $null;
+
+        $parent =& $root;
+        $last = array_pop($path);
+        foreach ($path as $index) {
+            if (!isset($parent[$index]['elements']) || !is_array($parent[$index]['elements'])) {
+                return $null;
+            }
+            $parent =& $parent[$index]['elements'];
+        }
+
+        if (!isset($parent[$last]) || !is_array($parent[$last])) return $null;
+        return $parent[$last];
     }
 
     private static function remove_all_repeatables(&$elements) {

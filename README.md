@@ -302,3 +302,34 @@ Version 1.12.3 changes the upload flow so Elementor JSON templates and DOCX file
 
 ### 1.12.6
 - Changed **Clear Generated Pages Table** so it only clears the plugin's generated-page To-Do table. It never deletes WordPress pages and does not clear logs.
+
+
+## v1.12.8 — Reliable centering for partial repeatable rows
+
+Partial final repeatable rows now keep the template's original Elementor column grid and use unused columns as invisible spacers. This avoids Elementor collapsing empty legacy columns and reliably centers 1, 2, or 3 cards in a 4-card row.
+
+The source-column selection uses the centered offset `ceil((prototype_count - card_count) / 2)`, so a four-column template places partial rows as:
+
+- 3 cards: blank, card, card, card
+- 2 cards: blank, card, card, blank
+- 1 card: blank, blank, card, blank
+
+## v1.12.7 — Center partial repeatable sections
+
+Partial repeatable rows are centered by adding transparent spacer columns while preserving the prototype card width. For a 4-card prototype, 3 cards are rendered as 12.5% spacer + 25% + 25% + 25% + 12.5% spacer; 2 cards use 25% side spacing; 1 card is centered with equal side spacing. Full rows are unchanged.
+
+
+## v1.12.9 — True centering for partial repeatable rows
+
+Partial repeatable sections now use equal half-width spacer columns on both sides of the remaining cards. For a four-card template, 3 cards render as 12.5% spacer + 25% + 25% + 25% + 12.5% spacer, producing true geometric centering within the section. Full sections remain unchanged.
+
+
+## v1.13.0 — True partial-row centering and remembered image pools
+
+- Partial repeatable rows are now centered by Elementor's actual flex container, so the entire group is centered in the section rather than placed in a left, middle, or right slot.
+- The original card width is preserved. A four-card 25% template with three cards now produces three 25% cards centered as a group.
+- The unused prototype columns are removed only from the partial generated section; full sections are unchanged.
+- Selected Media Library Image Pool IDs are remembered per WordPress admin user.
+- Returning to the generator restores the previous image selection and previews the saved images.
+- Clearing the image selection also clears the remembered selection.
+- The image pool is also saved when a generation job is submitted.

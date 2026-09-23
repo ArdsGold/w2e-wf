@@ -333,3 +333,26 @@ Partial repeatable sections now use equal half-width spacer columns on both side
 - Returning to the generator restores the previous image selection and previews the saved images.
 - Clearing the image selection also clears the remembered selection.
 - The image pool is also saved when a generation job is submitted.
+
+
+## v1.14.0 — Automatic DOCX page-type detection and template mapping
+
+The generator can now classify each DOCX independently when **Auto Detect** is selected:
+
+- A DOCX with one or more **yellow-font headings** is classified as **Unique**.
+- A DOCX with no yellow repeatable headings is classified as **Generic**.
+- Mixed uploads can contain Unique and Generic DOCX files in the same batch.
+- Each detected DOCX is queued with the matching Elementor JSON template.
+
+### Automatic JSON template mapping
+
+Saved Elementor JSON templates are classified automatically from their structure:
+
+- A template containing `data-customID|repeatableItem` is classified as **Unique**.
+- A template without repeatable-item markers is classified as **Generic**.
+
+Auto Detect provides separate saved-template selectors for Unique and Generic templates. New Unique and Generic JSON files can also be uploaded and are remembered automatically.
+
+If a detected DOCX type has no matching template selected, the batch is stopped before jobs are queued. Manual **Unique Pages** and **Generic Pages** modes remain available as overrides.
+
+The upload progress also reports the number of DOCX files detected as Unique and Generic before the final queue submission.

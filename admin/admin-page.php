@@ -24,6 +24,7 @@ add_action('admin_post_wfebpg_process_queue_now','wfebpg_process_queue_now');
 add_action('admin_post_wfebpg_clear_logs','wfebpg_clear_logs');
 add_action('admin_post_wfebpg_reset_generated','wfebpg_reset_generated');
 add_action('admin_post_wfebpg_rollback','wfebpg_rollback');
+add_action('admin_post_wfebpg_trash_generated','wfebpg_trash_generated');
 add_action('admin_post_wfebpg_clear_templates','wfebpg_clear_templates');
 add_action('wp_ajax_wfebpg_save_template','wfebpg_ajax_save_template');
 add_action('wp_ajax_wfebpg_upload_docx','wfebpg_ajax_upload_docx');
@@ -39,6 +40,10 @@ function wfebpg_admin(){
     $saved_templates=wfebpg_get_saved_templates();
     $saved_unique_templates=array_values(array_filter($saved_templates,function($t){return ($t['kind']??'generic')==='unique';}));
     $saved_generic_templates=array_values(array_filter($saved_templates,function($t){return ($t['kind']??'generic')==='generic';}));
+    $last_unique_template=sanitize_file_name((string)get_user_meta(get_current_user_id(),'wfebpg_last_unique_template',true));
+    $last_generic_template=sanitize_file_name((string)get_user_meta(get_current_user_id(),'wfebpg_last_generic_template',true));
+    if($last_unique_template && !wfebpg_find_saved_template($last_unique_template))$last_unique_template='';
+    if($last_generic_template && !wfebpg_find_saved_template($last_generic_template))$last_generic_template='';
     $saved_image_ids=array_values(array_unique(array_filter(array_map('absint',(array)get_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',true)))));
     ?>
 <div class="wrap wfebpg-admin"><h1>Wolf Forge Elementor Bulk Page Generator</h1>
@@ -61,18 +66,18 @@ function wfebpg_admin(){
         <select name="unique_saved_template" id="wfebpg-unique-template" style="min-width:420px;max-width:100%;margin-top:6px">
             <option value="">— Select Unique template —</option>
             <?php foreach ($saved_unique_templates as $template): ?>
-                <option value="<?php echo esc_attr($template['name']); ?>"><?php echo esc_html($template['name']); ?><?php if (!empty($template['modified'])): ?> — <?php echo esc_html(wp_date(get_option('date_format'), $template['modified'])); ?><?php endif; ?></option>
+                <option value="<?php echo esc_attr($template['name']); ?>" <?php selected($last_unique_template, $template['name']); ?>><?php echo esc_html($template['name']); ?><?php if (!empty($template['modified'])): ?> — <?php echo esc_html(wp_date(get_option('date_format'), $template['modified'])); ?><?php endif; ?></option>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo empty($saved_unique_templates) ? 'No saved Unique template yet. Upload one below.' : count($saved_unique_templates).' saved Unique template'.(count($saved_unique_templates)===1?'':'s').'.'; ?></p>
+        <p class="description"><?php echo empty($saved_unique_templates) ? 'No saved Unique template yet. Upload one below.' : count($saved_unique_templates).' saved Unique template'.(count($saved_unique_templates)===1?'':'s').'.'; ?><?php if($last_unique_template): ?> Last used: <strong><?php echo esc_html($last_unique_template); ?></strong><?php endif; ?></p>
         <label for="wfebpg-generic-template"><strong>Generic template</strong></label><br>
         <select name="generic_saved_template" id="wfebpg-generic-template" style="min-width:420px;max-width:100%;margin-top:6px">
             <option value="">— Select Generic template —</option>
             <?php foreach ($saved_generic_templates as $template): ?>
-                <option value="<?php echo esc_attr($template['name']); ?>"><?php echo esc_html($template['name']); ?><?php if (!empty($template['modified'])): ?> — <?php echo esc_html(wp_date(get_option('date_format'), $template['modified'])); ?><?php endif; ?></option>
+                <option value="<?php echo esc_attr($template['name']); ?>" <?php selected($last_generic_template, $template['name']); ?>><?php echo esc_html($template['name']); ?><?php if (!empty($template['modified'])): ?> — <?php echo esc_html(wp_date(get_option('date_format'), $template['modified'])); ?><?php endif; ?></option>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo empty($saved_generic_templates) ? 'No saved Generic template yet. Upload one below.' : count($saved_generic_templates).' saved Generic template'.(count($saved_generic_templates)===1?'':'s').'.'; ?></p>
+        <p class="description"><?php echo empty($saved_generic_templates) ? 'No saved Generic template yet. Upload one below.' : count($saved_generic_templates).' saved Generic template'.(count($saved_generic_templates)===1?'':'s').'.'; ?><?php if($last_generic_template): ?> Last used: <strong><?php echo esc_html($last_generic_template); ?></strong><?php endif; ?></p>
         <p id="wfebpg-detection-summary" class="description">Upload your DOCX files and the plugin will detect the page type for each file before queueing.</p>
     </div>
     <div id="wfebpg-manual-template" style="display:none">
@@ -120,7 +125,7 @@ function wfebpg_admin(){
 <p class="description">No WP-Cron worker is currently scheduled.</p>
 <?php endif; ?>
 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_process_queue_now"><?php wp_nonce_field('wfebpg_process_queue_now');?><button class="button button-primary" <?php disabled(empty($q)); ?>>Process Queue Now</button> <span class="description">Processes one queued job immediately.</span></form>
-<h2>Newly Created Pages — To-Do</h2><p>Use these links to open a generated page in WordPress or Elementor for final review and editing.</p><table class="widefat striped" style="margin-top:10px"><thead><tr><th>Created</th><th>Page</th><th>Actions</th></tr></thead><tbody><?php if(empty($created_pages)):?><tr><td colspan="3">No generated pages yet.</td></tr><?php else: foreach(array_slice($created_pages,0,100) as $cp): $cp_id=absint($cp['id']??0); if(!$cp_id)continue; ?><tr><td><?php echo esc_html($cp['time']??'');?></td><td><?php echo esc_html($cp['title']??get_the_title($cp_id));?></td><td><a class="button button-small" href="<?php echo esc_url(get_edit_post_link($cp_id));?>">Edit Page</a> <a class="button button-small" href="<?php echo esc_url(admin_url('post.php?post='.$cp_id.'&action=elementor'));?>">Edit with Elementor</a> <a href="<?php echo esc_url(get_permalink($cp_id));?>" target="_blank" rel="noopener">View</a></td></tr><?php endforeach; endif;?></tbody></table>
+<h2>Newly Created Pages — To-Do</h2><p>Use these links to open a generated page in WordPress or Elementor for final review and editing.</p><table class="widefat striped" style="margin-top:10px"><thead><tr><th>Created</th><th>Page</th><th>Actions</th></tr></thead><tbody><?php if(empty($created_pages)):?><tr><td colspan="3">No generated pages yet.</td></tr><?php else: foreach(array_slice($created_pages,0,100) as $cp): $cp_id=absint($cp['id']??0); if(!$cp_id)continue; ?><tr><td><?php echo esc_html($cp['time']??'');?></td><td><?php echo esc_html($cp['title']??get_the_title($cp_id));?></td><td><a class="button button-small" href="<?php echo esc_url(get_edit_post_link($cp_id));?>">Edit Page</a> <a class="button button-small" href="<?php echo esc_url(admin_url('post.php?post='.$cp_id.'&action=elementor'));?>">Edit with Elementor</a> <a href="<?php echo esc_url(get_permalink($cp_id));?>" target="_blank" rel="noopener">View</a> <?php if(get_post_type($cp_id)==='page' && current_user_can('delete_post',$cp_id)): $trash_url=wp_nonce_url(admin_url('admin-post.php?action=wfebpg_trash_generated&id='.$cp_id),'wfebpg_trash_generated_'.$cp_id); ?><a class="button button-small" style="border-color:#b32d2e;color:#b32d2e" href="<?php echo esc_url($trash_url);?>" onclick="return confirm('Move this generated page to the WordPress Trash?');">Move to Trash</a><?php endif; ?></td></tr><?php endforeach; endif;?></tbody></table>
 <h2>Generated Pages Table</h2><form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_reset_generated"><?php wp_nonce_field('wfebpg_reset_generated');?><button class="button button-secondary" style="border-color:#b32d2e;color:#b32d2e" onclick="return confirm('Clear the generated-page To-Do table? No WordPress pages or logs will be deleted. Continue?');">Clear Generated Pages Table</button> <span class="description">Clears only this plugin's generated-page To-Do table. It does not delete WordPress pages or clear logs.</span></form>
 <h2>Logs</h2><form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>"><input type="hidden" name="action" value="wfebpg_clear_logs"><?php wp_nonce_field('wfebpg_clear_logs');?><button class="button">Clear Logs Only</button></form><table class="widefat striped" style="margin-top:10px"><thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead><tbody><?php if(empty($logs)):?><tr><td colspan="3">No logs.</td></tr><?php else: foreach(array_slice($logs,0,100) as $l):?><tr><td><?php echo esc_html($l['time']);?></td><td><?php echo esc_html($l['level']);?></td><td><?php echo esc_html($l['message']);?></td></tr><?php endforeach; endif;?></tbody></table>
 </div><?php
@@ -367,6 +372,9 @@ function wfebpg_handle_generate(){
         }
     }catch(Throwable $e){wp_die(esc_html($e->getMessage()));}
 
+    if($template_paths['unique']) update_user_meta(get_current_user_id(),'wfebpg_last_unique_template',sanitize_file_name(basename($template_paths['unique'])));
+    if($template_paths['generic']) update_user_meta(get_current_user_id(),'wfebpg_last_generic_template',sanitize_file_name(basename($template_paths['generic'])));
+
     $upload=wp_upload_dir();$base=trailingslashit($upload['basedir']).'wfebpg/'.wp_generate_uuid4();wp_mkdir_p($base);
     $template_copies=[];
     foreach(['unique','generic'] as $kind){
@@ -435,6 +443,19 @@ function wfebpg_reset_generated(){
 function wfebpg_clear_templates(){
     if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_clear_templates'))wp_die('Unauthorized.');
     foreach(wfebpg_get_saved_templates() as $template) @unlink($template['path']);
+    wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;
+}
+function wfebpg_trash_generated(){
+    $id=absint($_GET['id']??0);
+    if(!$id || !current_user_can('delete_post',$id) || !check_admin_referer('wfebpg_trash_generated_'.$id))wp_die('Unauthorized.');
+    if(get_post_type($id)!=='page')wp_die('Only WordPress pages can be moved to Trash.');
+    $trashed=wp_trash_post($id);
+    if($trashed){
+        $created_pages=get_option('wfebpg_created_pages',[]);
+        $created_pages=array_values(array_filter($created_pages,function($row)use($id){return absint($row['id']??0)!==$id;}));
+        update_option('wfebpg_created_pages',$created_pages,false);
+        WFEBPG_Logger::log('Moved generated page #'.$id.' to the WordPress Trash.','info');
+    }
     wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;
 }
 function wfebpg_rollback(){wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;}

@@ -16,7 +16,7 @@
 
 # Wolf Forge Elementor Bulk Page Generator
 
-**Version 1.12.0**
+**Version 1.14.1**
 
 Bulk-generate Elementor pages from DOCX content and Elementor JSON templates. The plugin supports Generic and Unique mapping, yellow-heading repeatable sections, parent pages, phone-link conversion, queue processing, template validation, Media Library image pools, randomized repeatable images, previews/logs, generated-page tracking, and rollback/reset tools.
 
@@ -191,9 +191,9 @@ Each entry provides quick links for:
 
 ## Reset and rollback safety
 
-Use the reset tools on staging first.
+The **Clear Generated Pages Table** control only clears the plugin's To-Do table. It does not delete, trash, or otherwise modify any WordPress pages, and it does not clear logs.
 
-The reset workflow safely deletes pages explicitly marked as created by the plugin, clears the generated-page To-Do list, and clears logs. Pages that were deliberately overwritten from an existing page are tracked but are not automatically deleted by the reset operation.
+Individual pages can be intentionally moved to the normal WordPress Trash with the per-row **Move to Trash** action in the To-Do table.
 
 ## Installation / update
 
@@ -224,6 +224,14 @@ For a four-card visual grid:
 - Always validate and test on staging before large production runs.
 
 ## Changelog
+
+### 1.14.1 — Last-used templates and per-page Trash action
+
+- Remembers the last used Unique and Generic saved templates per administrator.
+- Restores those selections on later upload sessions.
+- Added a per-row **Move to Trash** action to the Newly Created Pages — To-Do table.
+- Moving a page to Trash removes only that page from the To-Do table; it does not permanently delete it.
+- Kept **Clear Generated Pages Table** safe: it only clears the table.
 
 ### 1.12.0 — Remembered JSON template library
 
@@ -356,3 +364,23 @@ Auto Detect provides separate saved-template selectors for Unique and Generic te
 If a detected DOCX type has no matching template selected, the batch is stopped before jobs are queued. Manual **Unique Pages** and **Generic Pages** modes remain available as overrides.
 
 The upload progress also reports the number of DOCX files detected as Unique and Generic before the final queue submission.
+
+## Last-used Unique and Generic templates
+
+Auto Detect now remembers the last saved template used for each page type per WordPress administrator.
+
+- The last selected/saved **Unique** template is restored automatically on the next upload session.
+- The last selected/saved **Generic** template is restored automatically on the next upload session.
+- The remembered selections are stored per admin user.
+- If a remembered template has been removed from the saved-template library, the selector falls back to no selection.
+- Uploading or selecting a different template updates that type's remembered choice.
+
+## Move generated pages to Trash
+
+Each row in **Newly Created Pages — To-Do** now has a **Move to Trash** action.
+
+- It moves only that selected WordPress page to the normal WordPress Trash.
+- It does not permanently delete the page.
+- The trashed page is removed from the plugin's To-Do table.
+- The action requires the current administrator to have permission to delete that page and uses a WordPress nonce for protection.
+- The separate **Clear Generated Pages Table** control still only clears the table and does not move or delete any pages.

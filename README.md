@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.0.1b  
+**Version:** r2.1.0  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
@@ -343,9 +343,9 @@ Changing those identifiers as part of a cosmetic rebrand would turn a safe renam
 
 For r2.0.1b, the public-facing brand is changed while the internal contract stays stable.
 
-### Why the version is `r2.0.1b`
+### Why the version is `r2.1.0`
 
-`r2.0.1b` identifies this rebranded build. The release includes the existing generator functionality plus documentation and maintainability-focused cleanup.
+`r2.1.0` includes the admin dashboard workflow release together with the completed internal code cleanup and validator traversal optimization. The refactor does not change the underlying generation contract.
 
 ---
 
@@ -371,10 +371,48 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.1.0 admin tabs, shared template state, and notification indicators.
+- [`docs/RELEASE-r2.1.0.md`](docs/RELEASE-r2.1.0.md) — r2.1.0 release scope and QA checklist.
+- [`docs/CODE-AUDIT-r2.1.0.md`](docs/CODE-AUDIT-r2.1.0.md) — unused-code audit and refactor notes.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — current release history; older history remains in `docs/CHANGELOG-LEGACY.md`.
 
 ---
 
 ## Changelog
+
+### r2.1.0 — Admin dashboard and workflow release
+
+### Internal refactor and performance maintenance
+
+- Removed eight confirmed-dead private generator helpers.
+- Removed two confirmed-unused local variables.
+- Reduced duplicate marker parsing during validator tree traversal.
+- Preserved public helper methods for external compatibility.
+- Added the r2.1.0 code audit documentation.
+
+- Reorganized the admin dashboard into five client-side tabs:
+  - Page Generation
+  - Template Image Replacement
+  - New Pages
+  - Template Validator
+  - Logs
+- Added visual separation and improved contrast for the dashboard tabs.
+- Kept tab switching client-side so moving between sections does not reload the admin page.
+- Added shared Elementor JSON template selection across Page Generation, Template Image Replacement, and Template Validator.
+- Added Saved Template management to Template Validator, including upload-to-library, rename, delete, and clear actions. Uploading a template to the library does not generate a page.
+- Made saved-template and uploaded-template selection mutually exclusive in Page Generation.
+- Added inline template renaming without browser pop-ups.
+- Improved Saved Template rows so template names are more prominent and upload dates remain secondary.
+- Added expandable image previews/lightbox behavior to Template Image Replacement.
+- Added automatic Template Image Replacement tab warnings for unresolved template-image mappings without requiring a manual image scan.
+- Added automatic Template Validator status indicators: orange for warnings and red for validation errors. Status is evaluated from the selected persistent template without requiring the Validate Template button.
+- Added a light-green New Pages notification when a new page is generated; opening New Pages acknowledges the notification.
+- Added a red Logs notification for newly detected error-level log entries; opening Logs acknowledges the notification.
+- Added Logs filtering by level and message search.
+- Simplified the repeatable-marker validator warning so the fallback behavior is explained clearly.
+- Preserved the existing generator, repeat-marker, queue, image-pool, image-mapping, validator, and page-processing contracts.
+- Removed the temporary developer-only Logs error test control from the release build.
+- Added release documentation for the admin dashboard, tab notifications, shared template state, and upgrade/testing expectations.
 
 ### r2.0.1b — Wolf Forge rebrand and maintainability release
 

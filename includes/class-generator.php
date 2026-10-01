@@ -176,7 +176,6 @@ class WFEBPG_Generator {
                 }
                 $template_ordinals[$level] = (int) ($template_ordinals[$level] ?? 0) + 1;
 
-                $cursor_key = $level . '|' . $parent_path;
                 $block_index = null;
                 $block = self::next_structured_block_in_scope(
                     $blocks,
@@ -328,33 +327,6 @@ class WFEBPG_Generator {
         }
         if ($current !== null) $blocks[] = $current;
         return $blocks;
-    }
-
-    private static function next_block(&$blocks, &$cursor) {
-        if ($cursor >= count($blocks)) return null;
-        $block = $blocks[$cursor];
-        $cursor++;
-        return $block;
-    }
-
-    private static function next_block_by_heading_level(&$blocks, &$cursor, $level, &$found_index = null, $excluded_indices = []) {
-        $count = count($blocks);
-        for ($i = $cursor; $i < $count; $i++) {
-            if ((int) ($blocks[$i]['heading_level'] ?? 0) !== (int) $level) continue;
-            if (!empty($excluded_indices[(string) ($blocks[$i]['heading'] ?? '')])) continue;
-            $cursor = $i + 1;
-            $found_index = $i;
-            return $blocks[$i];
-        }
-        return null;
-    }
-
-    private static function next_block_with_content(&$blocks, &$cursor) {
-        while ($cursor < count($blocks)) {
-            $block = $blocks[$cursor++];
-            if (!empty($block['content'])) return $block;
-        }
-        return null;
     }
 
     private static function set_widget_title(&$settings, $value) {
@@ -1324,126 +1296,6 @@ class WFEBPG_Generator {
         $section['settings'] = $settings;
     }
 
-    /** Remove a node at an element-tree path. */
-    private static function remove_at_path(&$root, $path) {
-        if (!$path) return false;
-        $parent_path = $path;
-        $index = array_pop($parent_path);
-        $parent =& $root;
-        foreach ($parent_path as $step) {
-            if (!isset($parent[$step]['elements']) || !is_array($parent[$step]['elements'])) {
-                unset($parent);
-                return false;
-            }
-            $parent =& $parent[$step]['elements'];
-        }
-        if (!isset($parent[$index])) {
-            unset($parent);
-            return false;
-        }
-        array_splice($parent, $index, 1);
-        unset($parent);
-        return true;
-    }
-
-    /**
-     * Remove the visual prototype columns that were not used in the current
-     * repeatable section. This is important when a column's background image
-     * is its visual card: removing only the Icon Box leaves a blank image-only
-     * card behind.
-     */
-    private static function remove_unused_repeatable_columns(&$section, $prototype_widgets, $used_count, $source_offset = 0) {
-        $used_paths = [];
-        $total = count($prototype_widgets);
-        if ($total === 0) return;
-
-        for ($j = 0; $j < $used_count; $j++) {
-            $path = $prototype_widgets[($source_offset + $j) % $total]['column_path'] ?? null;
-            if ($path !== null) {
-                $used_paths[serialize($path)] = true;
-            }
-        }
-
-        $unused = [];
-        foreach ($prototype_widgets as $source) {
-            $column_path = $source['column_path'] ?? null;
-            if ($column_path === null) continue;
-
-            $key = serialize($column_path);
-            if (!isset($used_paths[$key])) {
-                $unused[$key] = $column_path;
-            }
-        }
-
-        usort($unused, function ($a, $b) {
-            $a_count = count($a);
-            $b_count = count($b);
-            if ($a_count !== $b_count) return $b_count <=> $a_count;
-
-            for ($i = 0; $i < $a_count; $i++) {
-                if ($a[$i] !== $b[$i]) return $b[$i] <=> $a[$i];
-            }
-            return 0;
-        });
-
-        foreach ($unused as $path) {
-            self::remove_at_path($section['elements'], $path);
-        }
-    }
-
-    /**
-     * Keep the prototype's original column grid for a partial final row and
-     * clear unused card columns so they become invisible spacers.
-     *
-     * Example with four 25% columns:
-     * 3 cards -> [blank] [card] [card] [card]
-     * 2 cards -> [blank] [card] [card] [blank]
-     * 1 card  -> [blank] [blank] [card] [blank]
-     */
-    private static function clear_unused_repeatable_columns(&$section, $prototype_widgets, $used_count, $source_offset = 0) {
-        $total = count($prototype_widgets);
-        if ($total === 0 || $used_count >= $total) return;
-
-        $used = [];
-        for ($j = 0; $j < $used_count; $j++) {
-            $source = $prototype_widgets[($source_offset + $j) % $total] ?? null;
-            $path = is_array($source) ? ($source['column_path'] ?? null) : null;
-            if ($path !== null) $used[serialize($path)] = true;
-        }
-
-        foreach ($prototype_widgets as $source) {
-            $path = $source['column_path'] ?? null;
-            if ($path === null || isset($used[serialize($path)])) continue;
-
-            $column =& self::get_node_reference($section['elements'], $path);
-            if ($column === null) continue;
-
-            if (!isset($column['settings']) || !is_array($column['settings'])) {
-                $column['settings'] = [];
-            }
-
-            unset(
-                $column['settings']['background_image'],
-                $column['settings']['background_image_mobile'],
-                $column['settings']['background_color'],
-                $column['settings']['background_overlay_color'],
-                $column['settings']['background_overlay_opacity']
-            );
-
-            if (isset($column['settings']['__globals__']) && is_array($column['settings']['__globals__'])) {
-                unset(
-                    $column['settings']['__globals__']['background_color'],
-                    $column['settings']['__globals__']['background_overlay_color']
-                );
-            }
-
-            unset(
-                $column['settings']['background_background'],
-                $column['settings']['background_overlay_background']
-            );
-        }
-    }
-
     /** Return a writable reference to an Elementor node at a path. */
     private static function &get_node_reference(&$root, $path) {
         $null = null;
@@ -1755,50 +1607,6 @@ class WFEBPG_Generator {
         return array_slice($pool, 0, $needed);
     }
 
-    /** Populate the first Heading and first Text Editor inside a content-pair root. */
-    private static function populate_content_pair_root(&$root, $block) {
-        $heading_value = (string) ($block['heading'] ?? '');
-        $paragraph_value = implode("\n\n", (array) ($block['content'] ?? []));
-        $found_heading = false;
-        $found_text = false;
-
-        $walk = function (&$node) use (&$walk, &$found_heading, &$found_text, $heading_value, $paragraph_value) {
-            if (!is_array($node)) return;
-
-            $widget_type = (string) ($node['widgetType'] ?? '');
-            if (!$found_heading && $widget_type === 'heading') {
-                $settings = isset($node['settings']) && is_array($node['settings']) ? $node['settings'] : [];
-                self::set_widget_title($settings, $heading_value);
-                $node['settings'] = $settings;
-                $found_heading = true;
-            } elseif (!$found_text && $widget_type === 'text-editor') {
-                $settings = isset($node['settings']) && is_array($node['settings']) ? $node['settings'] : [];
-                self::set_widget_text($settings, $paragraph_value);
-                $node['settings'] = $settings;
-                $found_text = true;
-            }
-
-            if (isset($node['elements']) && is_array($node['elements'])) {
-                foreach ($node['elements'] as &$child) {
-                    if ($found_heading && $found_text) break;
-                    $walk($child);
-                }
-                unset($child);
-            }
-        };
-        $walk($root);
-
-        // If a legacy template uses a widget directly as the marked element,
-        // retain the generic settings-field fallback without naming a widget
-        // type. This keeps old templates usable while the new container model
-        // remains the preferred contract.
-        if (!$found_heading && !$found_text) {
-            if (!isset($root['settings']) || !is_array($root['settings'])) $root['settings'] = [];
-            self::set_widget_title($root['settings'], $heading_value);
-            if ($paragraph_value !== '') self::set_widget_text($root['settings'], $paragraph_value);
-        }
-    }
-
     private static function populate_repeatable_widget(&$widget, $item) {
         $settings = isset($widget['settings']) && is_array($widget['settings']) ? $widget['settings'] : [];
         $title = $item['heading'];
@@ -1923,37 +1731,6 @@ class WFEBPG_Generator {
             }
         }
         return false;
-    }
-
-    /**
-     * Clone only the marked repeatable widget. New widgets are inserted into
-     * the same parent arrays as the existing repeatable widgets, distributed
-     * round-robin so a four-column icon-box grid keeps using its existing columns.
-     */
-    private static function clone_repeatable_widgets(&$elements, $needed) {
-        if ($needed <= 0) return;
-
-        $locations = [];
-        self::find_repeatable_locations($elements, $locations);
-        if (!$locations) return;
-
-        $templates = [];
-        foreach ($locations as $location) {
-            $templates[] = [
-                'node' => $location['node'],
-                'node_path' => $location['node_path'] ?? array_merge($location['parent_path'], [$location['index']]),
-                'parent_path' => $location['parent_path'],
-                'column_path' => $location['column_path'] ?? null,
-                'index' => $location['index'],
-            ];
-        }
-
-        for ($i = 0; $i < $needed; $i++) {
-            $source = $templates[$i % count($templates)]['node'];
-            $copy = self::deep_clone_element($source);
-            $parent = $templates[$i % count($templates)]['parent_path'];
-            self::append_to_path($elements, $parent, $copy);
-        }
     }
 
     private static function find_repeatable_locations(&$elements, &$locations, $parent_path = [], $column_path = null) {
@@ -2295,7 +2072,7 @@ class WFEBPG_Generator {
             $result['warnings'][] = 'Repeatable cards contain image/background settings. An Image Pool can randomize those images and prevent duplicates within each generated section.';
         }
         if ($counts[self::REPEAT_ID] > 0 && $repeat_sections === 0) {
-            $result['warnings'][] = 'Repeatable markers were found, but no containing Elementor section/container was detected. Element-level cloning will be used.';
+            $result['warnings'][] = 'Repeatable content detected: The plugin could not identify a containing Elementor section/container for one or more repeat markers. Element-level cloning will be used automatically.';
         }
 
         return $result;
@@ -2303,9 +2080,12 @@ class WFEBPG_Generator {
 
     private static function analyze_elements($elements, &$repeat_sections, &$repeat_columns, &$image_locations, &$repeat_image_locations, $inside_repeat_section = false) {
         foreach ((array) $elements as $el) {
-            $is_repeat_section = (($el['elType'] ?? '') === 'section' && WFEBPG_Template::is_repeatable($el));
+            // Parse the marker once per element. The validator walks the entire
+            // Elementor tree, so avoiding duplicate marker parsing matters on
+            // large templates.
+            $marker = WFEBPG_Template::marker($el);
+            $is_repeat_section = (($el['elType'] ?? '') === 'section' && in_array('repeatable', $marker['flags'], true));
             if ($is_repeat_section) $repeat_sections++;
-            $custom = WFEBPG_Template::custom_id($el);
             $has_image = false;
             $settings = isset($el['settings']) && is_array($el['settings']) ? $el['settings'] : [];
             foreach (['background_image','background_image_mobile','image'] as $key) {

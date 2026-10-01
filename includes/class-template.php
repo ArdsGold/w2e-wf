@@ -47,8 +47,31 @@ class WFEBPG_Template {
     }
 
     /**
+     * Normalize legacy marker names to the current human-readable vocabulary.
+     * Existing Elementor templates continue to work without being rewritten.
+     */
+    /**
+     * Legacy Elementor marker aliases retained for existing templates.
+     * New templates should use the short canonical marker names.
+     */
+    private const LEGACY_MARKER_ALIASES = [
+        'h1NonRepeat' => 'h1',
+        'sectionTitleNonRepeat' => 'h2',
+        'hNonRepeat' => 'h3',
+        'pNonRepeat' => 'p',
+        'repeatableItem' => 'repeat',
+        'stepNumber' => 'step',
+    ];
+
+    private static function normalize_marker($marker) {
+        return isset(self::LEGACY_MARKER_ALIASES[$marker])
+            ? self::LEGACY_MARKER_ALIASES[$marker]
+            : $marker;
+    }
+
+    /**
      * Elementor stores the custom HTML attribute in settings as:
-     * data-customID|h1NonRepeat
+     * data-customID|h1
      *
      * We also accept common normalized forms so the plugin remains flexible.
      */
@@ -76,12 +99,12 @@ class WFEBPG_Template {
             }
             if (strpos($candidate, '|') !== false) {
                 $parts = explode('|', $candidate, 2);
-                return trim($parts[1]);
+                return self::normalize_marker(trim($parts[1]));
             }
             if (stripos($candidate, 'data-customID=') === 0) {
-                return trim(trim(substr($candidate, 14)), " \t\"'");
+                return self::normalize_marker(trim(trim(substr($candidate, 14)), " \t\"'"));
             }
-            return $candidate;
+            return self::normalize_marker($candidate);
         }
 
         return '';

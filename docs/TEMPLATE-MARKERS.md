@@ -1,133 +1,87 @@
 # Elementor Template Markers
 
-## Overview
+Wolf Forge Elementor Page Generator uses short, human-readable Elementor markers. Add them in Elementor under **Advanced → Attributes / Custom Attributes** using `data-customID|marker`.
 
-The generator uses Elementor custom attributes as semantic placeholders. A marker tells the generator what content should be written into a widget.
+## Current markers
 
-Add markers in Elementor under:
+| Marker | Meaning | Typical use |
+|---|---|---|
+| `data-customID|h1` | Main H1 | Heading widget or heading destination |
+| `data-customID|h2` | Section title / H2 | Heading widget |
+| `data-customID|h3` | H3 / subsection heading | Heading widget |
+| `data-customID|p` | Paragraph/body content | Text Editor, Icon Box, Toggle, and supported content widgets |
+| `data-customID|repeat` | Repeatable content prototype | Widget/card inside a repeatable section |
+| `data-customID|step` | Step number | Supported process/step layouts |
 
-**Advanced → Attributes / Custom Attributes**
+## Legacy aliases
 
-The normal form is:
+Existing templates may use the older marker names below. The generator automatically normalizes them to the current names:
 
-```text
-data-customID|MARKER_NAME
-```
+| Legacy marker | Current marker |
+|---|---|
+| `data-customID|h1NonRepeat` | `data-customID|h1` |
+| `data-customID|sectionTitleNonRepeat` | `data-customID|h2` |
+| `data-customID|hNonRepeat` | `data-customID|h3` |
+| `data-customID|pNonRepeat` | `data-customID|p` |
+| `data-customID|repeatableItem` | `data-customID|repeat` |
+| `data-customID|stepNumber` | `data-customID|step` |
 
-The parser reads the value after the first pipe character.
+No template migration is required solely because of the marker rename. New templates should use the short names.
 
-## Core markers
+## Marker syntax
 
-### H1
-
-```text
-data-customID|h1NonRepeat
-```
-
-Maps to a DOCX Heading 1 block.
-
-### Section title
-
-```text
-data-customID|sectionTitleNonRepeat
-```
-
-Maps to a DOCX Heading 2 block.
-
-### Normal heading
+Use one marker after the first pipe:
 
 ```text
-data-customID|hNonRepeat
+data-customID|h1
+data-customID|h2
+data-customID|h3
+data-customID|p
+data-customID|repeat
+data-customID|step
 ```
 
-Maps to a DOCX Heading 3 block.
-
-### Paragraph/body
+Do not create compound markers such as:
 
 ```text
-data-customID|pNonRepeat
+data-customID|h3|p
+data-customID|h3|repeat
 ```
 
-Maps body content to the appropriate Elementor widget based on its widget type.
+Those are not separate marker components. The generator reads the value after the first `|` as the marker identifier.
 
-### Repeatable item
+## DOCX-to-Elementor mapping
+
+The DOCX parser works with semantic content such as headings, paragraphs, and repeatable sections. The Elementor markers identify the destination:
 
 ```text
-data-customID|repeatableItem
+DOCX H1        -> h1
+DOCX H2        -> h2
+DOCX H3        -> h3
+DOCX paragraph -> p
+Repeat section  -> repeat
+Step number     -> step
 ```
 
-Marks a widget as the prototype for Unique/repeatable content.
+## Paragraph behavior
 
-### Step number
+`p` is a semantic content destination, not simply a blind "copy the next paragraph" instruction.
+
+- **Text Editor:** receives body content associated with the mapped heading/block.
+- **Icon Box:** receives heading/body content through the icon-box fields.
+- **Toggle:** receives multiple heading/body pairs for supported FAQ-style content.
+
+## Repeatable content
+
+`repeat` identifies the Elementor widget that acts as the repeatable prototype in Unique page generation. The generator can clone the containing structure as required by repeatable DOCX sections and the configured widgets-per-section behavior.
+
+## Recommended new-template convention
 
 ```text
-data-customID|stepNumber
+H1 widget        -> data-customID|h1
+H2 widget        -> data-customID|h2
+H3 widget        -> data-customID|h3
+Body Text Editor -> data-customID|p
+Repeatable card  -> data-customID|repeat
+Step number      -> data-customID|step
 ```
-
-Used by supported process/step layouts.
-
-## Important distinction: heading vs. paragraph
-
-A heading marker and a paragraph marker are separate semantic destinations.
-
-For a standard content block:
-
-```text
-Heading widget → data-customID|hNonRepeat
-Text Editor    → data-customID|pNonRepeat
-```
-
-The generator uses the DOCX block structure to keep the heading and its body together rather than simply taking the next paragraph in isolation.
-
-## Repeatable Icon Boxes
-
-For a repeatable Icon Box, use:
-
-```text
-data-customID|repeatableItem
-```
-
-The repeatable item can populate:
-
-- `title_text` from the item heading;
-- `description_text` from the item body.
-
-The rest of the Icon Box settings remain controlled by the Elementor prototype.
-
-## Toggle / FAQ
-
-A Toggle widget can use the repeatable marker to represent multiple FAQ entries. Each DOCX repeatable heading becomes a toggle title and its associated body becomes the toggle content.
-
-The Elementor JSON structure stores Toggle entries inside the widget's `tabs` array. The generator updates those entries instead of treating them like independent Elementor widgets.
-
-## Marker compatibility
-
-The parser accepts common representations of the custom attribute, including:
-
-- `customID`
-- `custom_id`
-- `data-customID`
-- `data_customID`
-- Elementor's `_attributes` field containing `data-customID|...`
-
-Do not change the internal parser or marker names casually; templates are production inputs and marker changes can affect existing page-generation workflows.
-
-## Recommended template pattern
-
-A typical generic template can be structured as:
-
-```text
-H1 widget          → data-customID|h1NonRepeat
-Intro Text Editor  → data-customID|pNonRepeat
-H2 widget          → data-customID|sectionTitleNonRepeat
-H3 widget          → data-customID|hNonRepeat
-Body Text Editor   → data-customID|pNonRepeat
-```
-
-A Unique section can use:
-
-```text
-Icon Box → data-customID|repeatableItem
-```
-
-If a section contains multiple repeatable card columns, configure **Widgets per section** to match the intended visual layout.

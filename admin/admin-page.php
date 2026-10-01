@@ -123,7 +123,7 @@ function wfebpg_admin(){
         <a class="button button-link-delete" href="<?php echo esc_url($clear_templates_url); ?>" onclick="return confirm('Clear all remembered Elementor JSON templates? This does not affect templates already copied into queued jobs.');">Clear Saved JSON Templates</a>
     <?php endif; ?>
 </td></tr>
-<tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" value="4" min="1" max="100" style="width:80px"></label><p class="description">Unique mode: maximum number of data-customID|repeatableItem widgets in each section. When reached, the entire containing Elementor section is cloned and the next yellow DOCX headings continue in the new section.</p></td></tr>
+<tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" value="4" min="1" max="100" style="width:80px"></label><p class="description">Unique mode: maximum number of data-customID|repeat widgets in each section. When reached, the entire containing Elementor section is cloned and the next yellow DOCX headings continue in the new section.</p></td></tr>
 <tr><th>Image Pool</th><td>
     <label class="wfebpg-toggle"><input type="checkbox" name="image_pool_enabled" id="wfebpg-image-pool-enabled" value="1"> <strong>Enable Media Library Image Pool</strong></label>
     <p class="description">Unique mode: randomly assign selected Media Library images to repeatable card sections. Images are not duplicated within the same generated section.</p>

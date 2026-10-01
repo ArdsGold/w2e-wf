@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Wolf Forge Elementor Page Generator
  * Description: Generate Elementor pages in bulk from DOCX content and Elementor JSON templates. Supports generic/unique mapping, remembered JSON templates, yellow-heading repeatable sections, parent pages, phone links, queue processing, template validation, Media Library image pools, randomized repeatable images, previews, logs, and rollback.
- * Version: r2.0.0
+ * Version: r2.0.1
  * Author: Macky Villafuerte, Arden Guinto
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WFEBPG_VERSION', 'r2.0.0');
+define('WFEBPG_VERSION', 'r2.0.1');
 define('WFEBPG_DIR', plugin_dir_path(__FILE__));
 define('WFEBPG_URL', plugin_dir_url(__FILE__));
 

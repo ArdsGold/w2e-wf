@@ -70,19 +70,18 @@ Before creating the ZIP:
 
 - Confirm the package root is `wolf-forge-elementor-page-generator/`.
 - Confirm the main file is `wolf-forge-elementor-page-generator.php`.
-- Confirm the plugin header version is `r2.0.0`.
+- Confirm the plugin header version matches the release being packaged (currently `r2.0.1`).
 - Confirm README and CHANGELOG agree with the version.
 - Remove temporary files and local test artifacts.
 - Verify the ZIP contains only the plugin source and documentation.
 
-## Release checklist for r2.0.0
+## Release checklist for r2.0.1
 
 - [x] Product name changed to Wolf Forge Elementor Page Generator.
-- [x] Version changed to r2.0.0.
-- [x] Authors changed to Macky Villafuerte and Arden Guinto.
+- [x] Version changed to r2.0.1.
+- [x] Canonical markers documented as `h1`, `h2`, `h3`, `p`, `repeat`, and `step`.
+- [x] Legacy marker aliases remain supported.
 - [x] Internal WFEBPG compatibility identifiers retained.
-- [x] README rewritten around the current functionality.
-- [x] Marker documentation added.
-- [x] Architecture documentation added.
-- [x] Development documentation added.
+- [x] Internal marker terminology cleaned up.
+- [x] README and marker documentation updated.
 - [x] PHP syntax validation performed before packaging.

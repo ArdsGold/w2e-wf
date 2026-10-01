@@ -149,7 +149,7 @@ The lock and time guard are important because Elementor page generation can be r
 
 ## Compatibility identifiers
 
-The following are intentionally stable in r2.0.0:
+The following are intentionally stable across the r2.x releases:
 
 - `WFEBPG_*` PHP constants/classes/functions;
 - `wfebpg_*` WordPress hooks and AJAX actions;

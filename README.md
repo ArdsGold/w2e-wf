@@ -1,15 +1,34 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.0.0  
+**Version:** r2.0.1  
 **Authors:** Macky Villafuerte, Arden Guinto
 
 Wolf Forge Elementor Page Generator is a WordPress plugin for generating Elementor pages in bulk from DOCX content and Elementor JSON templates.
 
 It is designed around the Wolf Forge content-production workflow: prepare structured DOCX content, mark an Elementor template with `data-customID` attributes, select the matching template, and let the generator build and queue WordPress pages while preserving the Elementor design structure.
 
-## What r2.0.0 changes
+## What r2.0.1 changes
 
-This release is a **Maintainability release**. The goal is to make the plugin easier for a human developer to understand and maintain without unnecessarily changing its existing generation behavior.
+This patch release formalizes the simplified Elementor marker system and cleans up internal terminology while preserving legacy template and WordPress data compatibility.
+
+### Marker modernization
+
+- Canonical Elementor markers are now `h1`, `h2`, `h3`, `p`, `repeat`, and `step`.
+- Legacy marker names remain supported as aliases and are normalized automatically.
+- Internal generator terminology now uses the canonical marker names instead of `sectionTitle`, `h`, and `repeatable` labels when referring to Elementor markers.
+- The DOCX fallback builder is explicitly documented as a DOCX data compatibility path, not an Elementor marker system.
+- No existing Elementor template needs to be migrated just because of the marker rename.
+
+
+This release is a **rebrand and maintainability release**. The goal is to make the plugin easier for a human developer to understand and maintain without unnecessarily changing its existing generation behavior.
+
+### Rebrand
+
+- Product name: **Wolf Forge Elementor Page Generator**
+- Original rebrand release: **r2.0.0**
+- Authors: **Macky Villafuerte, Arden Guinto**
+- Package folder: `wolf-forge-elementor-page-generator`
+- Main plugin file: `wolf-forge-elementor-page-generator.php`
 
 ### Compatibility-first implementation
 
@@ -46,16 +65,31 @@ The internal `WFEBPG_` PHP prefix, WordPress option names, cron hook, AJAX actio
 
 ## Elementor marker system
 
-The generator reads custom attributes from Elementor widgets. In Elementor, add the marker under **Advanced → Attributes / Custom Attributes**.
+The current marker system uses short, human-readable names. In Elementor, add the marker under **Advanced → Attributes / Custom Attributes**.
 
-| Marker | Purpose |
+| Current marker | Purpose |
 |---|---|
-| `data-customID|h1NonRepeat` | Main H1 destination; maps to a DOCX Heading 1 block. |
-| `data-customID|sectionTitleNonRepeat` | Major section-title destination; maps to a DOCX Heading 2 block. |
-| `data-customID|hNonRepeat` | Normal heading destination; maps to a DOCX Heading 3 block. |
-| `data-customID|pNonRepeat` | Paragraph/body destination. The widget type determines how content is inserted. |
-| `data-customID|repeatableItem` | Repeatable widget prototype for Unique pages. |
-| `data-customID|stepNumber` | Step-number marker used by supported process layouts. |
+| `data-customID|h1` | Main H1 destination; maps to a DOCX Heading 1 block. |
+| `data-customID|h2` | Major section-title destination; maps to a DOCX Heading 2 block. |
+| `data-customID|h3` | Normal heading destination; maps to a DOCX Heading 3 block. |
+| `data-customID|p` | Paragraph/body destination. The widget type determines how content is inserted. |
+| `data-customID|repeat` | Repeatable widget prototype for Unique pages. |
+| `data-customID|step` | Step-number marker used by supported process layouts. |
+
+### Legacy marker compatibility
+
+Older Elementor templates may still contain these markers:
+
+| Legacy marker | Current marker |
+|---|---|
+| `data-customID|h1NonRepeat` | `data-customID|h1` |
+| `data-customID|sectionTitleNonRepeat` | `data-customID|h2` |
+| `data-customID|hNonRepeat` | `data-customID|h3` |
+| `data-customID|pNonRepeat` | `data-customID|p` |
+| `data-customID|repeatableItem` | `data-customID|repeat` |
+| `data-customID|stepNumber` | `data-customID|step` |
+
+The generator normalizes these legacy names internally, so existing templates continue to work. New templates should use the short marker names.
 
 ### Marker syntax
 
@@ -65,27 +99,18 @@ The general syntax is:
 data-customID|MARKER_NAME
 ```
 
-The parser reads the value after the first `|`.
-
-For example:
+The plugin reads the value after the first `|`. A marker is a single semantic identifier. Do not use compound forms such as:
 
 ```text
-data-customID|h3
+data-customID|h3|p
+data-customID|h3|repeat
 ```
 
-and
-
-```text
-data-customID|h3|repeatable
-```
-
-are interpreted according to the marker parser's supported marker rules. The marker parser is deliberately tolerant of common Elementor attribute representations.
-
-For the current production workflow, use the documented marker names above rather than inventing new marker names unless the generator code is also updated.
+Those do not mean "heading plus paragraph" or "heading plus repeat".
 
 ## Paragraph behavior
 
-`pNonRepeat` is semantic rather than a blind "next paragraph" replacement.
+`p` is semantic rather than a blind "next paragraph" replacement.
 
 - **Text Editor:** receives body content associated with the mapped heading/block.
 - **Icon Box:** receives the heading and its associated body content through the icon-box fields.
@@ -201,7 +226,7 @@ That marker is used to:
 - provide page review links;
 - support the generated-page management workflow.
 
-The legacy `_wfebpg_` key is intentionally preserved in r2.0.0 for compatibility.
+The legacy `_wfebpg_` key is intentionally preserved for compatibility.
 
 ## Template validation
 
@@ -266,7 +291,7 @@ Detailed technical notes are in the `docs/` directory:
 - `docs/TEMPLATE-MARKERS.md` — marker syntax and content-mapping rules.
 - `docs/ARCHITECTURE.md` — file responsibilities and generation flow.
 - `docs/DEVELOPMENT.md` — safe maintenance, compatibility, and QA guidance.
-- `CHANGELOG.md` — release history and the r2.0.0 rebrand notes.
+- `CHANGELOG.md` — release history, including the r2.0.0 rebrand and r2.0.1 marker cleanup.
 
 ## Codebase layout
 
@@ -304,7 +329,7 @@ The visible product name is now **Wolf Forge Elementor Page Generator**, while t
 Before deploying a new build:
 
 - Validate PHP syntax for every PHP file.
-- Confirm the plugin header reports `r2.0.0`.
+- Confirm the plugin header reports `r2.0.1`.
 - Confirm the admin title shows **Wolf Forge Elementor Page Generator**.
 - Load the generator screen without PHP notices or fatal errors.
 - Load a saved JSON template.

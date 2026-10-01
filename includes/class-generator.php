@@ -10,12 +10,20 @@
 if (!defined('ABSPATH')) exit;
 
 class WFEBPG_Generator {
-    const H1_ID = 'h1NonRepeat';
-    const SECTION_TITLE_ID = 'sectionTitleNonRepeat';
-    const H_ID  = 'hNonRepeat';
-    const P_ID  = 'pNonRepeat';
-    const REPEAT_ID = 'repeatableItem';
-    const STEP_ID = 'stepNumber';
+    // Human-readable Elementor markers. Legacy names are normalized in WFEBPG_Template::custom_id().
+    // Canonical marker names used by new Elementor templates.
+    const H1_ID = 'h1';
+    const H2_ID = 'h2';
+    const H3_ID = 'h3';
+    const P_ID = 'p';
+    const REPEAT_ID = 'repeat';
+    const STEP_ID = 'step';
+
+    // Deprecated internal aliases retained so existing integrations that
+    // reference these class constants continue to work. They are not marker
+    // names and should not be used in new code.
+    const SECTION_TITLE_ID = self::H2_ID;
+    const H_ID = self::H3_ID;
 
     public static function clean_filename($name) {
         // Page titles should preserve special characters from the DOCX filename.
@@ -83,19 +91,19 @@ class WFEBPG_Generator {
     /**
      * Populate all non-repeat widgets using the custom IDs in the template.
      * Mapping is based on occurrence order in the DOCX:
-     * h1NonRepeat -> first non-yellow heading
-     * hNonRepeat  -> subsequent non-yellow headings
-     * pNonRepeat  -> paragraph/content blocks in document order
+     * h1 -> first non-yellow heading
+     * h3 -> subsequent non-yellow headings
+     * p -> paragraph/content blocks in document order
      */
     /**
      * Populate non-repeat content according to the semantic order of the DOCX.
      *
-     * The template uses pNonRepeat for several different Elementor widgets:
+     * The template uses p for several different Elementor widgets:
      * - Text Editor: body text belonging to the most recently mapped heading.
      * - Icon Box: one heading + its body paragraph.
      * - Toggle: multiple heading/body pairs (FAQ entries).
      *
-     * h1NonRepeat/hNonRepeat consume heading blocks in order. pNonRepeat
+     * h1/h3 consume heading blocks in order. p
      * widgets then consume the appropriate block(s), preventing paragraphs
      * from being shifted or duplicated merely because the DOCX contains many
      * headings between paragraph blocks.
@@ -103,7 +111,7 @@ class WFEBPG_Generator {
     private static function populate_nonrepeat(&$elements, $doc) {
         $blocks = !empty($doc['nonrepeat_blocks']) && is_array($doc['nonrepeat_blocks'])
             ? $doc['nonrepeat_blocks']
-            : self::legacy_nonrepeat_blocks($doc);
+            : self::build_nonrepeat_blocks_fallback($doc);
 
         $cursor = 0;
         $last_block = null;
@@ -122,7 +130,7 @@ class WFEBPG_Generator {
                     self::set_widget_title($settings, $block['heading']);
                     $last_block = $block;
                 }
-            } elseif ($custom_id === self::SECTION_TITLE_ID) {
+            } elseif ($custom_id === self::H2_ID) {
                 // Major section-title markers map specifically to level-2 DOCX
                 // headings, keeping them separate from normal H3 headings.
                 $block = self::next_block_by_heading_level($blocks, $cursor, 2);
@@ -130,7 +138,7 @@ class WFEBPG_Generator {
                     self::set_widget_title($settings, $block['heading']);
                     $last_block = $block;
                 }
-            } elseif ($custom_id === self::H_ID) {
+            } elseif ($custom_id === self::H3_ID) {
                 // Normal heading markers map to level-3 DOCX headings in the
                 // local-SEO document structure used by Wolf Forge.
                 $block = self::next_block_by_heading_level($blocks, $cursor, 3);
@@ -175,7 +183,7 @@ class WFEBPG_Generator {
     /**
      * Generic mode maps the DOCX by its actual H1/H2/H3 hierarchy.
      *
-     * pNonRepeat is intentionally reused for different widget types:
+     * p is intentionally reused for different widget types:
      * Text Editor = body for the most recently mapped heading,
      * Icon Box = the next H3 + its body inside the current H2,
      * Toggle = the remaining H3 + body pairs inside the current H2.
@@ -269,7 +277,7 @@ class WFEBPG_Generator {
                     self::set_widget_title($settings, $h1_block['heading']);
                     $last_block = $h1_block;
                 }
-            } elseif ($custom_id === self::SECTION_TITLE_ID) {
+            } elseif ($custom_id === self::H2_ID) {
                 if (isset($groups[$group_cursor])) {
                     $current_group_index = $group_cursor;
                     $group = $groups[$group_cursor];
@@ -278,7 +286,7 @@ class WFEBPG_Generator {
                     self::set_widget_title($settings, $group['heading']);
                     $last_block = $group;
                 }
-            } elseif ($custom_id === self::H_ID) {
+            } elseif ($custom_id === self::H3_ID) {
                 $block = null;
 
                 if ($current_group_index !== null && isset($groups[$current_group_index])) {
@@ -361,7 +369,12 @@ class WFEBPG_Generator {
         });
     }
 
-    private static function legacy_nonrepeat_blocks($doc) {
+    /**
+     * Build non-repeat blocks from the older DOCX reader shape when the newer
+     * nonrepeat_blocks structure is unavailable. This is DOCX data compatibility,
+     * not Elementor marker compatibility.
+     */
+    private static function build_nonrepeat_blocks_fallback($doc) {
         $blocks = [];
         $current = null;
         foreach (($doc['items'] ?? []) as $item) {
@@ -450,14 +463,14 @@ class WFEBPG_Generator {
      * Each yellow heading starts one item; all following non-heading paragraphs
      * belong to that item until the next yellow heading.
      *
-     * repeatableItem is treated as the actual marked Elementor widget. The
+     * repeat is treated as the actual marked Elementor widget. The
      * widget itself is cloned/populated; its parent column/container is never
      * cloned merely to create another item.
      */
     private static function populate_repeatables(&$elements, $repeatables, $widgets_per_section = 0) {
         if (!$repeatables) return;
 
-        // When a section contains repeatableItem widgets, use that whole
+        // When a section contains repeat widgets, use that whole
         // section as the visual prototype and clone the section when the
         // configured widget limit is reached. The expansion pass also tells
         // us whether a repeatable section was found, so we do not traverse the
@@ -474,7 +487,7 @@ class WFEBPG_Generator {
         $wanted = count($repeatables);
 
         if ($existing === 0 && $wanted > 0) {
-            throw new Exception('Unique template contains no data-customID|repeatableItem widget.');
+            throw new Exception('Unique template contains no data-customID|repeat widget.');
         }
 
         if ($wanted < $existing) {
@@ -499,7 +512,7 @@ class WFEBPG_Generator {
     }
 
     /**
-     * Replace every section containing repeatableItem widgets with one or more
+     * Replace every section containing repeat widgets with one or more
      * cloned sections. Each generated section receives at most
      * $widgets_per_section marked widgets. The source widgets are cloned in
      * round-robin order so an existing four-card design can preserve its four
@@ -1312,8 +1325,8 @@ class WFEBPG_Generator {
     private static function count_markers(&$elements) {
         $counts = [
             self::H1_ID => 0,
-            self::SECTION_TITLE_ID => 0,
-            self::H_ID => 0,
+            self::H2_ID => 0,
+            self::H3_ID => 0,
             self::P_ID => 0,
             self::REPEAT_ID => 0,
             self::STEP_ID => 0,
@@ -1368,16 +1381,16 @@ class WFEBPG_Generator {
             }
 
             if ($counts[self::H1_ID] < 1 && $result['doc']['h1']) {
-                $result['errors'][] = 'DOCX contains an H1, but the template has no h1NonRepeat marker.';
+                $result['errors'][] = 'DOCX contains an H1, but the template has no h1 marker.';
             }
             if ($result['doc']['repeatables'] > 0 && $counts[self::REPEAT_ID] < 1) {
-                $result['errors'][] = 'DOCX contains yellow repeatable headings, but the template has no repeatableItem marker.';
+                $result['errors'][] = 'DOCX contains yellow repeatable headings, but the template has no repeat marker.';
             }
-            if ($result['doc']['h2'] > 0 && $counts[self::SECTION_TITLE_ID] < 1) {
-                $result['warnings'][] = 'DOCX contains H2 sections, but the template has no sectionTitleNonRepeat marker.';
+            if ($result['doc']['h2'] > 0 && $counts[self::H2_ID] < 1) {
+                $result['warnings'][] = 'DOCX contains H2 sections, but the template has no h2 marker.';
             }
-            if ($result['doc']['h3'] > 0 && $counts[self::H_ID] < 1 && $counts[self::P_ID] < 1) {
-                $result['warnings'][] = 'DOCX contains H3 content, but the template has no hNonRepeat or pNonRepeat markers to receive it.';
+            if ($result['doc']['h3'] > 0 && $counts[self::H3_ID] < 1 && $counts[self::P_ID] < 1) {
+                $result['warnings'][] = 'DOCX contains H3 content, but the template has no h3 or p markers to receive it.';
             }
         }
 
@@ -1385,7 +1398,7 @@ class WFEBPG_Generator {
             $result['warnings'][] = 'Repeatable cards contain image/background settings. An Image Pool can randomize those images and prevent duplicates within each generated section.';
         }
         if ($counts[self::REPEAT_ID] > 0 && $repeat_sections === 0) {
-            $result['warnings'][] = 'repeatableItem markers were found, but no containing Elementor section was detected. Widget-level cloning will be used.';
+            $result['warnings'][] = 'repeat markers were found, but no containing Elementor section was detected. Widget-level cloning will be used.';
         }
 
         return $result;
@@ -1432,10 +1445,10 @@ class WFEBPG_Generator {
             'Mapping DOCX: ' . count($doc['items']) . ' paragraphs, ' .
             count($doc['repeatables']) . ' yellow repeatable headings. Template markers: ' .
             'h1=' . $template_counts[self::H1_ID] . ', ' .
-            'sectionTitle=' . $template_counts[self::SECTION_TITLE_ID] . ', ' .
-            'h=' . $template_counts[self::H_ID] . ', ' .
+            'h2=' . $template_counts[self::H2_ID] . ', ' .
+            'h3=' . $template_counts[self::H3_ID] . ', ' .
             'p=' . $template_counts[self::P_ID] . ', ' .
-            'repeatable=' . $template_counts[self::REPEAT_ID] . '.'
+            'repeat=' . $template_counts[self::REPEAT_ID] . '.'
         );
 
         if (($job['mode'] ?? 'generic') === 'generic') {
@@ -1453,7 +1466,7 @@ class WFEBPG_Generator {
 
         if (($job['mode'] ?? 'generic') === 'unique') {
             if (!$template_counts[self::REPEAT_ID] && !empty($doc['repeatables'])) {
-                throw new Exception('DOCX contains ' . count($doc['repeatables']) . ' yellow repeatable headings, but the Elementor template contains no data-customID|repeatableItem widgets.');
+                throw new Exception('DOCX contains ' . count($doc['repeatables']) . ' yellow repeatable headings, but the Elementor template contains no data-customID|repeat widgets.');
             }
 
             self::populate_repeatables(

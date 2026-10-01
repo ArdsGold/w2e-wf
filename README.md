@@ -1,349 +1,393 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.0.1  
-**Authors:** Macky Villafuerte, Arden Guinto
+**Version:** r2.0.1b  
+**Authors:** Macky Villafuerte, Arden Guinto  
+**WordPress:** 6.0+  
+**PHP:** 7.4+  
+**Requires:** Elementor
 
-Wolf Forge Elementor Page Generator is a WordPress plugin for generating Elementor pages in bulk from DOCX content and Elementor JSON templates.
+Wolf Forge Elementor Page Generator creates WordPress pages from DOCX content using an Elementor JSON template.
 
-It is designed around the Wolf Forge content-production workflow: prepare structured DOCX content, mark an Elementor template with `data-customID` attributes, select the matching template, and let the generator build and queue WordPress pages while preserving the Elementor design structure.
+The generator is **marker-driven**: the Elementor template decides exactly which widgets receive dynamic content. This keeps the visual design in Elementor while the DOCX controls page-specific copy.
 
-## What r2.0.1 changes
+> **Compatibility note:** The plugin's internal `WFEBPG_*` PHP classes, WordPress option names, AJAX actions, cron hook, and CSS selectors are intentionally retained from the previous codebase. They are implementation identifiers, not the public product name. Keeping them stable protects existing saved templates, queued jobs, logs, and user settings during the rebrand.
 
-This patch release formalizes the simplified Elementor marker system and cleans up internal terminology while preserving legacy template and WordPress data compatibility.
+---
 
-### Marker modernization
+## What it does
 
-- Canonical Elementor markers are now `h1`, `h2`, `h3`, `p`, `repeat`, and `step`.
-- Legacy marker names remain supported as aliases and are normalized automatically.
-- Internal generator terminology now uses the canonical marker names instead of `sectionTitle`, `h`, and `repeatable` labels when referring to Elementor markers.
-- The DOCX fallback builder is explicitly documented as a DOCX data compatibility path, not an Elementor marker system.
-- No existing Elementor template needs to be migrated just because of the marker rename.
+- Generates WordPress pages from one reusable Elementor JSON template.
+- Reads normal DOCX Heading 1/2/3 styles and paragraphs.
+- Maps content with `data-customID` markers.
+- Supports fixed and repeatable content blocks.
+- `|repeat` and the legacy `|repeatable` marker are equivalent; `|repeat` is preferred for new templates.
+- Repeatable regions are independently scoped to their surrounding heading hierarchy, so Services, Process, FAQs, and other H3/P groups do not share one global repeat cursor.
+- Supports the parent-container repeatable model.
+- Supports Elementor Toggle internal repeaters.
+- Remembers uploaded Elementor JSON templates.
+- Lets you map template images to Media Library images.
+- Supports an optional Media Library image pool for repeatable cards.
+- Processes large batches through a WP-Cron queue.
+- Regenerates Elementor CSS after page creation.
+- Provides a Template Validator and Mapping Debugger.
+- Tracks generated pages in an admin To-Do table.
+- Supports safe rollback/trash workflows already present in the plugin.
 
+---
 
-This release is a **rebrand and maintainability release**. The goal is to make the plugin easier for a human developer to understand and maintain without unnecessarily changing its existing generation behavior.
+## Installation
 
-### Rebrand
+1. Back up the current plugin, Elementor templates, and generated pages.
+2. In WordPress, open **Plugins → Add New → Upload Plugin**.
+3. Upload the plugin ZIP.
+4. Activate **Wolf Forge Elementor Page Generator**.
+5. Open **Wolf Forge Page Generator** in the WordPress admin.
+6. Upload or select an Elementor JSON template.
+7. Upload one or more DOCX files.
+8. Validate the template before a large production batch.
+9. Run a small staging test first.
 
-- Product name: **Wolf Forge Elementor Page Generator**
-- Original rebrand release: **r2.0.0**
-- Authors: **Macky Villafuerte, Arden Guinto**
-- Package folder: `wolf-forge-elementor-page-generator`
-- Main plugin file: `wolf-forge-elementor-page-generator.php`
+### Updating an existing installation
 
-### Compatibility-first implementation
+This release is a **rebrand of the existing WFEBPG codebase**. Internal option names and hooks were deliberately not renamed. That means the new code can continue reading the existing plugin's saved templates, queue data, logs, image-pool selections, and generated-page records.
 
-The internal `WFEBPG_` PHP prefix, WordPress option names, cron hook, AJAX action names, and stored job keys are intentionally retained. This avoids breaking pages, queued jobs, saved templates, user settings, or existing WordPress data merely because the product name changed.
+Because the public plugin slug has been rebranded, treat this ZIP as a replacement build when installing it over an existing copy. Do not keep both copies active at the same time.
 
-### Readability improvements
+---
 
-- Added clearer file-level documentation and compatibility notes.
-- Added developer documentation for the template marker system and generation pipeline.
-- Normalized the main plugin bootstrap formatting.
-- Improved readability of the Elementor template helper without changing its public behavior.
-- Kept the large generation engine structurally intact so the rebrand does not become an unnecessary functional rewrite.
+## Basic workflow
 
-## Requirements
+### 1. Build the Elementor template
 
-- WordPress 6.0 or newer
-- PHP 7.4 or newer
-- Elementor installed and active
-- A WordPress administrator account with the required page/media permissions
-- DOCX files containing structured content
-- Elementor JSON templates containing the Wolf Forge marker attributes
+Create the visual page in Elementor.
 
-## Main workflow
+Only widgets with a `data-customID` marker are populated. Everything else remains under the designer's control.
 
-1. Open **Wolf Forge Elementor Page Generator** in WordPress Admin.
-2. Choose the generation mode or use Auto Detect when available.
-3. Upload one or more DOCX files.
-4. Select or upload the appropriate Elementor JSON template(s).
-5. Optionally configure the Media Library image pool.
-6. Queue the pages.
-7. Allow WP-Cron to process the queue, or use **Process Queue Now**.
-8. Review the generated pages from the **Newly Created Pages — To-Do** table.
-9. Open the page in WordPress or Elementor for final QA.
+### 2. Add markers
 
-## Elementor marker system
+Use **Elementor → Advanced → Attributes / Custom Attributes**.
 
-The current marker system uses short, human-readable names. In Elementor, add the marker under **Advanced → Attributes / Custom Attributes**.
-
-| Current marker | Purpose |
-|---|---|
-| `data-customID|h1` | Main H1 destination; maps to a DOCX Heading 1 block. |
-| `data-customID|h2` | Major section-title destination; maps to a DOCX Heading 2 block. |
-| `data-customID|h3` | Normal heading destination; maps to a DOCX Heading 3 block. |
-| `data-customID|p` | Paragraph/body destination. The widget type determines how content is inserted. |
-| `data-customID|repeat` | Repeatable widget prototype for Unique pages. |
-| `data-customID|step` | Step-number marker used by supported process layouts. |
-
-### Legacy marker compatibility
-
-Older Elementor templates may still contain these markers:
-
-| Legacy marker | Current marker |
-|---|---|
-| `data-customID|h1NonRepeat` | `data-customID|h1` |
-| `data-customID|sectionTitleNonRepeat` | `data-customID|h2` |
-| `data-customID|hNonRepeat` | `data-customID|h3` |
-| `data-customID|pNonRepeat` | `data-customID|p` |
-| `data-customID|repeatableItem` | `data-customID|repeat` |
-| `data-customID|stepNumber` | `data-customID|step` |
-
-The generator normalizes these legacy names internally, so existing templates continue to work. New templates should use the short marker names.
-
-### Marker syntax
-
-The general syntax is:
+Basic markers:
 
 ```text
-data-customID|MARKER_NAME
+data-customID|h1
+data-customID|h2
+data-customID|h3
+data-customID|p
 ```
 
-The plugin reads the value after the first `|`. A marker is a single semantic identifier. Do not use compound forms such as:
+Combined heading + paragraph marker:
 
 ```text
 data-customID|h3|p
+```
+
+Repeatable marker:
+
+```text
 data-customID|h3|repeat
 ```
 
-Those do not mean "heading plus paragraph" or "heading plus repeat".
+See [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) for the complete mapping contract.
 
-## Paragraph behavior
+### 3. Prepare the DOCX
 
-`p` is semantic rather than a blind "next paragraph" replacement.
+Use normal Microsoft Word heading styles:
 
-- **Text Editor:** receives body content associated with the mapped heading/block.
-- **Icon Box:** receives the heading and its associated body content through the icon-box fields.
-- **Toggle:** receives multiple heading/body pairs for FAQ-style content.
+- Heading 1
+- Heading 2
+- Heading 3
+- Normal paragraphs
 
-This design prevents paragraphs from drifting when a DOCX contains several headings between content blocks.
-
-## Unique / repeatable content
-
-A repeatable DOCX item is identified by a heading that is both a Word heading and marked with the configured yellow font/highlight convention.
-
-Everything after that yellow heading belongs to the repeatable item until the next yellow repeatable heading.
-
-For an Elementor widget marked as a repeatable item, the generator can clone the visual prototype and populate each generated item.
-
-### Icon Box repeatables
-
-For an Icon Box repeatable widget:
-
-- repeatable heading → `title_text`
-- associated body → `description_text`
-- widget styling, icon, link, spacing, and other Elementor settings remain based on the template prototype
-
-### Widgets per section
-
-When the template contains multiple repeatable card columns, **Widgets per section** controls how many generated cards are placed in each Elementor section.
-
-For a four-card prototype and a value of `4`:
+For a repeatable H3 section:
 
 ```text
-Items 1–4   → Section 1
-Items 5–8   → Section 2
-Items 9–12  → Section 3
+Heading 2
+Services
+
+Heading 3
+Roof Repair
+Paragraph one.
+Paragraph two.
+
+Heading 3
+Roof Replacement
+Paragraph one.
+Paragraph two.
 ```
 
-Partial rows are centered while preserving the prototype card width.
+The generator associates each heading with the paragraphs that follow it until the next relevant heading.
 
-## Alternating repeatable card colors
+### 4. Validate
 
-The generator can preserve a two-color alternating pattern found in the template.
+Use **Template Validator** before generating a large batch.
 
-Example source pattern:
+It reports:
+
+- Marker counts.
+- Repeatable sections.
+- Image locations.
+- DOCX compatibility.
+- Mapping/debug information.
+
+### 5. Generate
+
+Upload the DOCX files, choose the Elementor template, configure the optional image pool and parent page, then queue the pages.
+
+The queue is processed by WP-Cron. **Process Queue Now** is available when you need to process a queued job manually.
+
+---
+
+## Marker safety rule
+
+> **No `data-customID` = no content mapping.**
+
+This is the most important rule in the plugin.
+
+Unmarked headings, buttons, icons, images, decorative copy, and other Elementor content are not rewritten by the content mapper.
+
+An unmarked element can still be cloned when it sits inside a marked repeatable parent. Cloning is a layout operation; it does not mean the element's text is dynamically populated.
+
+---
+
+## Repeatable parent containers
+
+The recommended modern pattern is:
 
 ```text
-A / B / A / B
+Container
+  data-customID|h3|repeat
+
+  Heading widget
+  Text Editor widget
+  Button widget
 ```
 
-Generated sections alternate the prototype pattern without rewriting templates that do not clearly contain a two-color alternating system.
+The container represents one complete repeatable item.
 
-Supported color sources include Elementor global color tokens and literal Elementor color values.
+For every matching DOCX H3 record, the generator:
 
-## Media Library image pool
+1. Clones the marked parent container.
+2. Finds the first Heading widget.
+3. Inserts the DOCX H3 text.
+4. Finds the first Text Editor widget.
+5. Inserts the paragraphs associated with that H3.
+6. Leaves unmarked child content alone.
 
-Unique repeatable sections can optionally use selected WordPress Media Library images.
+This works well for:
 
-Behavior:
+- Services.
+- Benefits.
+- Process steps.
+- Feature cards.
+- FAQs.
+- Icon boxes.
+- Other repeated Elementor layouts.
 
-- Selected images are validated as image attachments.
-- Images are randomized independently for repeatable sections.
-- A single generated section does not receive the same pool image twice when enough usable images exist.
-- Images may be reused in another generated section or another generated page.
-- If the pool is smaller than the number of cards, remaining cards keep their template image.
-- Static, non-repeatable template backgrounds are not replaced by the repeatable image pool.
+### `h3|repeat` vs `h3|p|repeat`
 
-## Saved Elementor JSON templates
+Both are supported:
 
-The plugin remembers uploaded Elementor JSON templates in its WordPress uploads library.
+```text
+data-customID|h3|repeat
+```
 
-- Previously saved templates appear in the selector.
-- Uploading a JSON file saves it automatically.
-- Uploading another file with the same filename replaces the saved copy.
-- A queued job receives its own copy of the selected template.
-- Clearing the saved library does not delete generated pages or templates already copied into queued jobs.
-- Templates are validated before being stored.
+```text
+data-customID|h3|p|repeat
+```
 
-## Automatic page-type detection
+The first is the simplest canonical form. The second documents that the repeatable unit contains heading + paragraph content.
 
-When Auto Detect is used, the generator can classify each DOCX independently.
+---
 
-- DOCX with yellow repeatable headings → **Unique**
-- DOCX without yellow repeatable headings → **Generic**
+## Fixed heading + paragraph containers
 
-Saved JSON templates are classified from their Elementor structure:
+For a non-cloned container that should receive one DOCX heading and its associated paragraph content:
 
-- Template containing the repeatable marker → **Unique**
-- Template without the repeatable marker → **Generic**
+```text
+data-customID|h3|p
+```
 
-Auto Detect can therefore process mixed batches of Generic and Unique DOCX files while selecting the matching template for each page.
+The generator uses the first Heading widget and first Text Editor widget inside the marked element.
+
+This is useful for widgets such as Elementor Icon Box, where one widget contains both a title and description.
+
+---
+
+## Elementor Toggle
+
+Toggle widgets have their own internal repeated item collection.
+
+Use:
+
+```text
+data-customID|h3|repeat
+```
+
+on the Toggle widget itself.
+
+The generator rebuilds the Toggle's internal items from the matching DOCX H3/body records instead of cloning the entire Toggle widget.
+
+Existing visual settings, icons, typography, schema settings, and other widget settings are preserved.
+
+---
+
+## Image handling
+
+### Template Image Replacement
+
+The Template Image Replacement tool scans images already present in the saved Elementor JSON template.
+
+It can:
+
+- Show the original template image.
+- Suggest a Media Library replacement using filename similarity.
+- Preview the suggested replacement.
+- Let you manually choose a Media Library image.
+- Save the mapping for the template.
+
+### Media Library Image Pool
+
+The optional Image Pool can assign selected Media Library images to repeatable card sections.
+
+Images are not duplicated within the same generated repeatable section, but they may be reused on another section or page.
+
+---
 
 ## Queue processing
 
-Generation is queued rather than forcing every page to be generated inside one browser request.
+Generation jobs are stored in a WordPress option and processed in small batches.
 
-The plugin uses:
+The worker uses:
 
-- a WordPress option-backed queue;
-- a recurring WP-Cron worker;
-- a near-immediate single event when a new job is queued;
-- a worker lock to avoid overlapping queue processing;
-- a small per-request job limit and time guard.
+- A short-lived queue lock.
+- A maximum number of jobs per request.
+- A maximum processing-time guard.
+- A near-immediate single cron event when a job is queued.
+- The recurring minute worker as a backup.
 
-This keeps large batches from requiring one long-running admin request.
+This reduces the chance of a large batch monopolizing a single PHP request.
 
-## Generated-page tracking
+If WP-Cron is unavailable, use **Process Queue Now** from the admin screen.
 
-Pages created by the generator are marked with the `_wfebpg_generated` post meta value.
+---
 
-That marker is used to:
+## Generated page handling
 
-- identify generated pages;
-- scope the plugin's generated-page CSS;
-- populate the admin To-Do table;
-- provide page review links;
-- support the generated-page management workflow.
+After generation, pages appear in **Newly Created Pages — To-Do**.
 
-The legacy `_wfebpg_` key is intentionally preserved for compatibility.
+The table provides quick access to:
 
-## Template validation
+- Edit Page.
+- Edit with Elementor.
+- View.
+- Move to Trash where permitted.
 
-The built-in validator can inspect an Elementor JSON template and optionally a DOCX file.
+**Clear Generated Pages Table** only clears the plugin's tracking table. It does not delete WordPress pages.
 
-It reports information such as:
+---
 
-- content marker counts;
-- repeatable sections;
-- repeatable columns;
-- image/background locations;
-- repeatable image locations;
-- DOCX compatibility information;
-- blocking errors;
-- warnings.
-
-Use the validator before a large batch when a new template has been created or modified.
-
-## Static template image replacement
-
-The generator supports filename-based replacement for static images in saved Elementor templates.
-
-The workflow allows you to:
-
-1. scan a saved template;
-2. review matching Media Library suggestions;
-3. manually choose replacements when required;
-4. save the mapping for that template;
-5. apply the mapping to generated template copies before page generation.
-
-This is separate from the Dynamic Image Pool used by repeatable Unique sections.
-
-## Phone links
-
-The generator includes phone-link processing for supported generated content. This allows phone numbers in generated page content to be converted into `tel:` links according to the plugin's existing rules.
-
-## Parent pages and existing slugs
-
-Generated pages can optionally be assigned a WordPress parent page.
-
-When overwrite is disabled, the generator avoids unintentionally replacing an existing page and uses WordPress-safe slug handling for the new page.
-
-Page titles preserve meaningful filename characters while WordPress continues to sanitize the URL slug separately.
-
-## Rollback and cleanup
-
-The admin interface includes tools for:
-
-- reviewing generated pages;
-- moving selected generated pages to WordPress Trash;
-- clearing the generated-page To-Do table without deleting pages;
-- clearing plugin logs;
-- clearing saved JSON templates;
-- stopping an upload/queueing sequence before final submission.
-
-These controls are intentionally separate so clearing tracking data does not silently delete WordPress content.
-
-## Developer documentation
-
-Detailed technical notes are in the `docs/` directory:
-
-- `docs/TEMPLATE-MARKERS.md` — marker syntax and content-mapping rules.
-- `docs/ARCHITECTURE.md` — file responsibilities and generation flow.
-- `docs/DEVELOPMENT.md` — safe maintenance, compatibility, and QA guidance.
-- `CHANGELOG.md` — release history, including the r2.0.0 rebrand and r2.0.1 marker cleanup.
-
-## Codebase layout
+## Code organization
 
 ```text
 wolf-forge-elementor-page-generator/
-├── wolf-forge-elementor-page-generator.php  # Plugin bootstrap
-├── README.md                                 # User/developer overview
-├── CHANGELOG.md                              # Release history
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DEVELOPMENT.md
-│   └── TEMPLATE-MARKERS.md
+├── wolf-forge-elementor-page-generator.php
 ├── admin/
-│   └── admin-page.php                        # Admin screens and handlers
+│   └── admin-page.php
 ├── assets/
 │   ├── admin.css
 │   ├── admin.js
 │   └── frontend.css
-└── includes/
-    ├── class-docx-reader.php                 # DOCX parsing
-    ├── class-generator.php                   # Page generation engine
-    ├── class-logger.php                      # Logging
-    ├── class-phone-linker.php                # Phone link conversion
-    └── class-template.php                    # Elementor JSON helpers
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── INSTALLATION.md
+│   └── MARKER-SYSTEM.md
+├── includes/
+│   ├── class-docx-reader.php
+│   ├── class-generator.php
+│   ├── class-logger.php
+│   ├── class-phone-linker.php
+│   └── class-template.php
+└── README.md
 ```
 
-## Compatibility note for developers
+### Responsibility of each class
 
-Do not rename the existing `WFEBPG_` classes/functions, `wfebpg_*` actions, options, cron hooks, or post-meta keys as part of a normal branding update. Those identifiers are implementation details that are already persisted in WordPress sites and jobs.
+**`WFEBPG_DOCX_Reader`**  
+Reads `word/document.xml` from DOCX files and converts Word paragraphs into normalized document records.
 
-The visible product name is now **Wolf Forge Elementor Page Generator**, while the internal identifiers remain stable by design.
+**`WFEBPG_Template`**  
+Decodes Elementor JSON, reads marker attributes, normalizes legacy marker names, and exposes template helpers.
 
-## QA checklist
+**`WFEBPG_Generator`**  
+Owns document mapping, repeatable sections, image assignment, page creation, Elementor data persistence, queue processing, and validation.
 
-Before deploying a new build:
+**`WFEBPG_Phone_Linker`**  
+Converts supported US phone-number text into safe `tel:` links without modifying existing anchors or HTML attributes.
 
-- Validate PHP syntax for every PHP file.
-- Confirm the plugin header reports `r2.0.1`.
-- Confirm the admin title shows **Wolf Forge Elementor Page Generator**.
-- Load the generator screen without PHP notices or fatal errors.
-- Load a saved JSON template.
-- Validate a template with the built-in validator.
-- Generate at least one Generic page.
-- Generate at least one Unique page.
-- Confirm repeatable Icon Box title and description content populate correctly.
-- Confirm Toggle/FAQ content remains aligned.
-- Confirm Media Library image-pool behavior.
-- Confirm queued jobs process through WP-Cron or **Process Queue Now**.
-- Confirm generated pages appear in the To-Do table.
-- Confirm Elementor editing still opens normally.
-- Confirm generated-page frontend CSS is scoped to generated pages.
+**`WFEBPG_Logger`**  
+Maintains the rolling generator activity/error log.
 
-## License / distribution
+**`admin/admin-page.php`**  
+Registers the WordPress admin screens, forms, AJAX handlers, template library, validator, and generated-page management UI.
 
-This package contains the Wolf Forge Elementor Page Generator codebase. Add the project's chosen license text before public redistribution if the distribution terms require an explicit license file.
+---
+
+## Compatibility and design decisions
+
+### Why the internal prefix is still `WFEBPG`
+
+The original implementation uses the `WFEBPG` prefix throughout PHP classes, WordPress options, AJAX actions, cron hooks, CSS classes, and stored metadata.
+
+Changing those identifiers as part of a cosmetic rebrand would turn a safe rename into a data migration.
+
+For r2.0.1b, the public-facing brand is changed while the internal contract stays stable.
+
+### Why the version is `r2.0.1b`
+
+`r2.0.1b` identifies this rebranded build. The release includes the existing generator functionality plus documentation and maintainability-focused cleanup.
+
+---
+
+## Development guidelines
+
+When extending the plugin:
+
+1. Keep `WFEBPG_*` internal identifiers stable unless a migration is intentionally planned.
+2. Do not populate an Elementor element unless it has an explicit marker.
+3. Prefer small helper methods with descriptive names.
+4. Keep DOCX parsing separate from Elementor mapping.
+5. Keep template decoding/marker normalization in `WFEBPG_Template`.
+6. Preserve existing queued-job compatibility.
+7. Add comments for non-obvious Elementor JSON behavior, not for self-evident code.
+8. Test on staging before processing a large DOCX batch.
+9. Run PHP syntax checks before packaging.
+10. Update the changelog when behavior changes.
+
+---
+
+## Documentation
+
+- [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
+- [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
+
+---
+
+## Changelog
+
+### r2.0.1b — Wolf Forge rebrand and maintainability release
+
+- Rebranded the public plugin name to **Wolf Forge Elementor Page Generator**.
+- Set authors to **Macky Villafuerte** and **Arden Guinto**.
+- Set release version to **r2.0.1b**.
+- Renamed the distributable plugin directory and main plugin file to the Wolf Forge brand.
+- Kept `WFEBPG_*` internal identifiers for upgrade compatibility.
+- Reworked the README into a structured developer/user guide.
+- Added architecture and installation documentation.
+- Improved readability in core bootstrap and logging code.
+- Preserved existing marker, queue, image replacement, image pool, validation, and page-generation behavior.
+
+### Previous release history
+
+The original codebase's historical changelog is preserved in `docs/CHANGELOG-LEGACY.md`.

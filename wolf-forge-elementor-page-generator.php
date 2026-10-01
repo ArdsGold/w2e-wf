@@ -1,9 +1,10 @@
 <?php
 /**
  * Plugin Name: Wolf Forge Elementor Page Generator
- * Description: Generate Elementor pages in bulk from DOCX content and Elementor JSON templates. Supports generic/unique mapping, remembered JSON templates, yellow-heading repeatable sections, parent pages, phone links, queue processing, template validation, Media Library image pools, randomized repeatable images, previews, logs, and rollback.
- * Version: r2.0.1
+ * Description: Bulk-generate Elementor pages from DOCX files and Elementor JSON templates. Uses a marker-driven single-template mapping system, remembered JSON templates, repeatable sections, parent pages, phone links, queue processing, template validation, Media Library image pools, randomized repeatable images, previews, logs, and rollback.
+ * Version: r2.0.1b
  * Author: Macky Villafuerte, Arden Guinto
+ * Text Domain: wolf-forge-elementor-page-generator
  * Requires at least: 6.0
  * Requires PHP: 7.4
  */
@@ -11,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WFEBPG_VERSION', 'r2.0.1');
+define('WFEBPG_VERSION', 'r2.0.1b');
 define('WFEBPG_DIR', plugin_dir_path(__FILE__));
 define('WFEBPG_URL', plugin_dir_url(__FILE__));
 
@@ -22,14 +23,26 @@ require_once WFEBPG_DIR . 'includes/class-phone-linker.php';
 require_once WFEBPG_DIR . 'includes/class-logger.php';
 require_once WFEBPG_DIR . 'admin/admin-page.php';
 
-register_activation_hook(__FILE__, function(){
-    if (!wp_next_scheduled('wfebpg_process_queue')) wp_schedule_event(time()+60,'minute','wfebpg_process_queue');
+register_activation_hook(__FILE__, function () {
+    if (!wp_next_scheduled('wfebpg_process_queue')) {
+        wp_schedule_event(time() + 60, 'minute', 'wfebpg_process_queue');
+    }
 });
-register_deactivation_hook(__FILE__, function(){
+
+register_deactivation_hook(__FILE__, function () {
     wp_clear_scheduled_hook('wfebpg_process_queue');
 });
-add_action('wfebpg_process_queue',['WFEBPG_Generator','process_queue']);
-add_filter('cron_schedules',function($s){$s['minute']=['interval'=>60,'display'=>'Every Minute'];return $s;});
+
+add_action('wfebpg_process_queue', ['WFEBPG_Generator', 'process_queue']);
+
+add_filter('cron_schedules', function ($schedules) {
+    $schedules['minute'] = [
+        'interval' => 60,
+        'display'  => 'Every Minute',
+    ];
+
+    return $schedules;
+});
 
 
 /** Mark plugin-generated pages so the full-width CSS is strictly scoped. */

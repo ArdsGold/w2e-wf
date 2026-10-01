@@ -1,4 +1,8 @@
 <?php
+/**
+ * Reads DOCX files into the semantic content structure used by the generator.
+ */
+
 if (!defined('ABSPATH')) exit;
 
 class WFEBPG_DOCX_Reader {

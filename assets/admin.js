@@ -301,3 +301,46 @@ jQuery(function($){
 
     syncTemplateUI();
 })(jQuery);
+
+// Template image replacement map: static/template images only.
+(function($){
+    var $template=$('#wfebpg-image-map-template'), $load=$('#wfebpg-load-template-images'), $list=$('#wfebpg-template-image-map-list'), $status=$('#wfebpg-template-image-map-status');
+    if(!$template.length) return;
+    var state={images:[],map:{}};
+    function esc(v){return $('<div>').text(v||'').html();}
+    function saveMap(){
+        var payload={}; state.images.forEach(function(img){ if(state.map[img.key]) payload[img.key]=state.map[img.key]; });
+        $.post(WFEBPG_Admin.ajaxUrl,{action:'wfebpg_save_template_image_map',nonce:WFEBPG_Admin.templateImageNonce,template:$template.val(),map:JSON.stringify(payload)})
+        .done(function(r){ if(r.success)$status.text('Saved '+r.data.count+' image mapping(s).'); else $status.text(r.data&&r.data.message?r.data.message:'Unable to save mappings.'); })
+        .fail(function(){ $status.text('Unable to save mappings.'); });
+    }
+    function render(){
+        if(!state.images.length){$list.html('<p class="description">No template images found.</p>');return;}
+        var html='';
+        state.images.forEach(function(img,i){
+            var mapped=img.mapped, chosen=state.map[img.key]?true:false, suggestion=img.suggestions&&img.suggestions[0];
+            html+='<div class="wfebpg-image-map-row" data-key="'+esc(img.key)+'">';
+            html+='<div class="wfebpg-image-map-old"><strong>Template image</strong><div class="wfebpg-image-map-thumb">'+(img.url?'<img src="'+esc(img.url)+'">':'<span>No preview</span>')+'</div><div class="wfebpg-image-map-name">'+esc(img.filename||img.url||'Unknown image')+'</div><small>'+esc(img.field)+'</small></div>';
+            html+='<div class="wfebpg-image-map-arrow">→</div>';
+            html+='<div class="wfebpg-image-map-new"><strong>Replacement</strong><div class="wfebpg-map-current">'+(mapped?'<div class="wfebpg-image-map-thumb"><img src="'+esc(mapped.url)+'"></div><div>'+esc(mapped.title||mapped.filename)+'</div>':'<span class="description">Not mapped</span>')+'</div>';
+            if(suggestion){ html+='<div class="wfebpg-image-map-suggestion"><strong>Suggested: '+esc(suggestion.image.title||suggestion.image.filename)+'</strong> <span>('+esc(suggestion.score)+'% match)</span><br><button type="button" class="button button-small wfebpg-use-suggestion" data-key="'+esc(img.key)+'" data-id="'+suggestion.image.id+'">Use Suggestion</button></div>'; }
+            html+='<button type="button" class="button button-small wfebpg-choose-template-image" data-key="'+esc(img.key)+'">Choose Media</button> <button type="button" class="button-link-delete wfebpg-clear-template-image" data-key="'+esc(img.key)+'">Clear</button></div></div>';
+        });
+        $list.html(html);
+    }
+    $load.on('click',function(){
+        var name=$template.val(); if(!name){$status.text('Select a saved template first.');$list.empty();return;}
+        $load.prop('disabled',true).text('Scanning...'); $status.text('Scanning template images and comparing Media Library filenames...');
+        $.post(WFEBPG_Admin.ajaxUrl,{action:'wfebpg_get_template_images',nonce:WFEBPG_Admin.templateImageNonce,template:name})
+        .done(function(r){ if(!r.success){$status.text(r.data&&r.data.message?r.data.message:'Unable to scan template.');return;} state.images=r.data.images||[];state.map={};state.images.forEach(function(img){if(img.mapped)state.map[img.key]=img.mapped.id;});$status.text(state.images.length+' template image(s) found. Review the suggestions below.');render(); })
+        .fail(function(){ $status.text('Unable to scan template.'); })
+        .always(function(){ $load.prop('disabled',false).text('Scan Template Images'); });
+    });
+    $list.on('click','.wfebpg-use-suggestion',function(){ state.map[$(this).data('key')]=parseInt($(this).data('id'),10); var img=state.images.find(function(x){return x.key===$(this).data('key');}.bind(this)); if(img){img.mapped=(img.suggestions||[]).find(function(x){return parseInt(x.image.id,10)===parseInt($(this).data('id'),10);}.bind(this)).image;} render(); saveMap(); });
+    $list.on('click','.wfebpg-choose-template-image',function(){
+        var key=$(this).data('key'), frame=wp.media({title:'Choose replacement image',button:{text:'Use this image'},multiple:false,library:{type:'image'}});
+        frame.on('select',function(){ var a=frame.state().get('selection').first().toJSON(); state.map[key]=parseInt(a.id,10); var img=state.images.find(function(x){return x.key===key;}); if(img)img.mapped={id:a.id,title:a.title,filename:a.filename||a.filename,url:a.url||a.sizes&&a.sizes.medium&&a.sizes.medium.url}; render(); saveMap(); }); frame.open();
+    });
+    $list.on('click','.wfebpg-clear-template-image',function(){ var key=$(this).data('key'); delete state.map[key]; var img=state.images.find(function(x){return x.key===key;}); if(img)img.mapped=false; render(); saveMap(); });
+    $template.on('change',function(){$list.empty();$status.text('Select Scan Template Images to load the current mappings and suggestions.');});
+})(jQuery);

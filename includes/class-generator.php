@@ -1,4 +1,12 @@
 <?php
+/**
+ * Core Elementor page generation engine.
+ *
+ * The WFEBPG class name is intentionally retained for backwards compatibility with
+ * existing queued jobs and stored WordPress data. The public product name is now
+ * Wolf Forge Elementor Page Generator.
+ */
+
 if (!defined('ABSPATH')) exit;
 
 class WFEBPG_Generator {
@@ -10,10 +18,10 @@ class WFEBPG_Generator {
     const STEP_ID = 'stepNumber';
 
     public static function clean_filename($name) {
+        // Page titles should preserve special characters from the DOCX filename.
+        // Only remove the file extension and normalize whitespace; do not strip
+        // punctuation such as apostrophes, &, #, parentheses, hyphens, etc.
         $name = pathinfo($name, PATHINFO_FILENAME);
-        $name = preg_replace('/[\s._+\-]+$/u', '', $name);
-        $name = preg_replace('/[._+\-]+/u', ' ', $name);
-        $name = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $name);
         return trim(preg_replace('/\s+/u', ' ', $name));
     }
 
@@ -34,16 +42,41 @@ class WFEBPG_Generator {
     }
 
     public static function process_queue() {
-        $q = get_option('wfebpg_queue', []);
-        if (!$q) return;
-
-        $job = array_shift($q);
-        update_option('wfebpg_queue', $q, false);
+        // Prevent WP-Cron and the manual "Process Queue Now" action from
+        // processing the same job at the same time. add_option() is atomic
+        // enough for this single-worker lock on normal WordPress storage.
+        $lock_key = 'wfebpg_queue_worker_lock';
+        $locked_at = get_option($lock_key, 0);
+        if ($locked_at && (time() - (int) $locked_at) < 120) return;
+        if ($locked_at) delete_option($lock_key);
+        if (!add_option($lock_key, time(), '', false)) return;
 
         try {
-            self::generate($job);
-        } catch (Throwable $e) {
-            WFEBPG_Logger::log($e->getMessage(), 'error');
+            $q = get_option('wfebpg_queue', []);
+            if (!$q) return;
+
+            // Process a small batch per cron request. This is much faster than
+        // forcing large queues to wait one full minute per page, while the
+        // time guard keeps heavy Elementor jobs from monopolizing the request.
+        $started = microtime(true);
+        $processed = 0;
+        $max_jobs = 3;
+        $max_seconds = 25;
+
+            while ($q && $processed < $max_jobs && (microtime(true) - $started) < $max_seconds) {
+                $job = array_shift($q);
+                update_option('wfebpg_queue', $q, false);
+
+                try {
+                    self::generate($job);
+                } catch (Throwable $e) {
+                    WFEBPG_Logger::log($e->getMessage(), 'error');
+                }
+
+                $processed++;
+            }
+        } finally {
+            delete_option($lock_key);
         }
     }
 
@@ -1264,25 +1297,15 @@ class WFEBPG_Generator {
         if (!class_exists('\Elementor\Core\Files\CSS\Post')) return;
 
         try {
-            if (class_exists('\Elementor\Plugin') && isset(\Elementor\Plugin::$instance->files_manager) && method_exists(\Elementor\Plugin::$instance->files_manager, 'clear_cache')) {
-                \Elementor\Plugin::$instance->files_manager->clear_cache();
-            }
+            // Updating this post's CSS file is enough. Clearing Elementor's
+            // global cache before/after every generated page is expensive and
+            // affects unrelated pages.
             $css_file = new \Elementor\Core\Files\CSS\Post($post_id);
             if (method_exists($css_file, 'update')) {
                 $css_file->update();
             }
         } catch (Throwable $e) {
             WFEBPG_Logger::log('Elementor CSS regeneration warning: ' . $e->getMessage(), 'warning');
-        }
-
-        if (class_exists('\Elementor\Plugin') && isset(\Elementor\Plugin::$instance->files_manager)) {
-            try {
-                if (method_exists(\Elementor\Plugin::$instance->files_manager, 'clear_cache')) {
-                    \Elementor\Plugin::$instance->files_manager->clear_cache();
-                }
-            } catch (Throwable $e) {
-                WFEBPG_Logger::log('Elementor cache clear warning: ' . $e->getMessage(), 'warning');
-            }
         }
     }
 
@@ -1442,7 +1465,7 @@ class WFEBPG_Generator {
 
         self::apply_phone_links($elements);
 
-        $title = self::clean_filename(basename($job['docx']));
+        $title = self::clean_filename((string)($job['page_title'] ?? basename($job['docx'])));
         if ($title === '') throw new Exception('Could not derive a page title from filename.');
         $slug = self::slug($title);
 

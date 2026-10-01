@@ -1,24 +1,26 @@
 <?php
 /**
- * Plugin Name: Wolf Forge Elementor Bulk Page Generator
- * Description: Bulk-generate Elementor pages from DOCX files and Elementor JSON templates. Supports generic/unique mapping, remembered JSON templates, yellow-heading repeatable sections, parent pages, phone links, queue processing, template validation, Media Library image pools, randomized repeatable images, previews, logs, and rollback.
- * Version: 1.14.1
- * Author: Wolf Forge
+ * Plugin Name: Wolf Forge Elementor Page Generator
+ * Description: Generate Elementor pages in bulk from DOCX content and Elementor JSON templates. Supports generic/unique mapping, remembered JSON templates, yellow-heading repeatable sections, parent pages, phone links, queue processing, template validation, Media Library image pools, randomized repeatable images, previews, logs, and rollback.
+ * Version: r2.0.0
+ * Author: Macky Villafuerte, Arden Guinto
  * Requires at least: 6.0
  * Requires PHP: 7.4
  */
-if (!defined('ABSPATH')) exit;
+if (!defined('ABSPATH')) {
+    exit;
+}
 
-define('WFEBPG_VERSION','1.14.1');
-define('WFEBPG_DIR',plugin_dir_path(__FILE__));
-define('WFEBPG_URL',plugin_dir_url(__FILE__));
+define('WFEBPG_VERSION', 'r2.0.0');
+define('WFEBPG_DIR', plugin_dir_path(__FILE__));
+define('WFEBPG_URL', plugin_dir_url(__FILE__));
 
-require_once WFEBPG_DIR.'includes/class-docx-reader.php';
-require_once WFEBPG_DIR.'includes/class-template.php';
-require_once WFEBPG_DIR.'includes/class-generator.php';
-require_once WFEBPG_DIR.'includes/class-phone-linker.php';
-require_once WFEBPG_DIR.'includes/class-logger.php';
-require_once WFEBPG_DIR.'admin/admin-page.php';
+require_once WFEBPG_DIR . 'includes/class-docx-reader.php';
+require_once WFEBPG_DIR . 'includes/class-template.php';
+require_once WFEBPG_DIR . 'includes/class-generator.php';
+require_once WFEBPG_DIR . 'includes/class-phone-linker.php';
+require_once WFEBPG_DIR . 'includes/class-logger.php';
+require_once WFEBPG_DIR . 'admin/admin-page.php';
 
 register_activation_hook(__FILE__, function(){
     if (!wp_next_scheduled('wfebpg_process_queue')) wp_schedule_event(time()+60,'minute','wfebpg_process_queue');

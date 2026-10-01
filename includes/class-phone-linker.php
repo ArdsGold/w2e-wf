@@ -1,4 +1,8 @@
 <?php
+/**
+ * Converts supported phone-number text into telephone links in generated content.
+ */
+
 if (!defined('ABSPATH')) exit;
 
 /**

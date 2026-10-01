@@ -1,386 +1,324 @@
+# Wolf Forge Elementor Page Generator
 
-## v1.12.4 — Stop Queueing
+**Version:** r2.0.0  
+**Authors:** Macky Villafuerte, Arden Guinto
 
-- Added a **Stop Queueing** button to the bulk-generation form.
-- While DOCX files are being uploaded individually, the button cancels the active upload sequence and prevents the remaining files from being queued.
-- The temporary upload batch is cleaned up when queueing is stopped.
-- No generated pages are affected because the main queue submission is not completed.
+Wolf Forge Elementor Page Generator is a WordPress plugin for generating Elementor pages in bulk from DOCX content and Elementor JSON templates.
 
-## v1.12.1 — Saved Template Selector Fix
+It is designed around the Wolf Forge content-production workflow: prepare structured DOCX content, mark an Elementor template with `data-customID` attributes, select the matching template, and let the generator build and queue WordPress pages while preserving the Elementor design structure.
 
-- The saved JSON template selector is now always visible, including when the library is empty.
-- Saved templates show their filename and saved date for easier selection.
-- Uploading a new `.json` remains optional when a saved template is selected.
-- Uploading a new JSON with the same filename replaces the saved copy.
-- The admin screen clearly separates **Use a previously uploaded template** from **Upload a new JSON template**.
+## What r2.0.0 changes
 
-# Wolf Forge Elementor Bulk Page Generator
+This release is a **Maintainability release**. The goal is to make the plugin easier for a human developer to understand and maintain without unnecessarily changing its existing generation behavior.
 
-**Version 1.14.1**
+### Compatibility-first implementation
 
-Bulk-generate Elementor pages from DOCX content and Elementor JSON templates. The plugin supports Generic and Unique mapping, yellow-heading repeatable sections, parent pages, phone-link conversion, queue processing, template validation, Media Library image pools, randomized repeatable images, previews/logs, generated-page tracking, and rollback/reset tools.
+The internal `WFEBPG_` PHP prefix, WordPress option names, cron hook, AJAX action names, and stored job keys are intentionally retained. This avoids breaking pages, queued jobs, saved templates, user settings, or existing WordPress data merely because the product name changed.
 
-## What changed in 1.11.0
+### Readability improvements
 
-Version 1.11.0 focuses on the repeatable-section generation path and keeps the existing v1.10.0 visual behavior while reducing unnecessary Elementor-tree work.
+- Added clearer file-level documentation and compatibility notes.
+- Added developer documentation for the template marker system and generation pipeline.
+- Normalized the main plugin bootstrap formatting.
+- Improved readability of the Elementor template helper without changing its public behavior.
+- Kept the large generation engine structurally intact so the rebrand does not become an unnecessary functional rewrite.
 
-### Performance and algorithm improvements
+## Requirements
 
-- Repeatable widgets now record their containing Column path during the original tree scan instead of repeatedly searching for the same Column later.
-- Repeatable-section expansion no longer performs a separate full-tree `has_repeatable_section()` scan before the actual expansion pass.
-- Repeatable color detection is validated once per prototype section instead of re-validating the entire A/B/A/B pattern for every generated card.
-- Color selection uses an O(1) XOR slot calculation: the first generated section preserves the template pattern, the next section reverses it, and the pattern continues alternating.
-- Image assignment and color assignment now share one Column traversal per generated card.
-- Media Library attachment type/MIME/URL validation is prepared once and reused across generated sections instead of repeating WordPress attachment lookups.
-- Elementor element paths are traversed without the previous `end($path)` side effect and with cached path length.
-- Literal Elementor colors and Elementor global color tokens retain their original storage style when the alternating pattern is applied.
+- WordPress 6.0 or newer
+- PHP 7.4 or newer
+- Elementor installed and active
+- A WordPress administrator account with the required page/media permissions
+- DOCX files containing structured content
+- Elementor JSON templates containing the Wolf Forge marker attributes
 
+## Main workflow
 
-## Remembered JSON templates
+1. Open **Wolf Forge Elementor Page Generator** in WordPress Admin.
+2. Choose the generation mode or use Auto Detect when available.
+3. Upload one or more DOCX files.
+4. Select or upload the appropriate Elementor JSON template(s).
+5. Optionally configure the Media Library image pool.
+6. Queue the pages.
+7. Allow WP-Cron to process the queue, or use **Process Queue Now**.
+8. Review the generated pages from the **Newly Created Pages — To-Do** table.
+9. Open the page in WordPress or Elementor for final QA.
 
-The main generator now keeps uploaded Elementor `.json` templates in a small WordPress uploads library so they can be reused without uploading the same file every time.
+## Elementor marker system
 
-- Previously uploaded JSON templates appear in the **Elementor JSON Template** dropdown.
-- Uploading a new `.json` file saves it automatically.
-- A new upload with the same filename replaces the previously remembered copy.
-- Generated jobs copy the selected template into their own job folder, so replacing or clearing the saved library does not change an already queued job.
-- **Clear Saved JSON Templates** removes the remembered template files only; it does not delete generated pages or templates already copied into queued jobs.
-- Templates are validated as Elementor JSON before they are added to the remembered library.
+The generator reads custom attributes from Elementor widgets. In Elementor, add the marker under **Advanced → Attributes / Custom Attributes**.
 
-## Template markers
+| Marker | Purpose |
+|---|---|
+| `data-customID|h1NonRepeat` | Main H1 destination; maps to a DOCX Heading 1 block. |
+| `data-customID|sectionTitleNonRepeat` | Major section-title destination; maps to a DOCX Heading 2 block. |
+| `data-customID|hNonRepeat` | Normal heading destination; maps to a DOCX Heading 3 block. |
+| `data-customID|pNonRepeat` | Paragraph/body destination. The widget type determines how content is inserted. |
+| `data-customID|repeatableItem` | Repeatable widget prototype for Unique pages. |
+| `data-customID|stepNumber` | Step-number marker used by supported process layouts. |
 
-The plugin is designed for the Elementor JSON structure used by Wolf Forge.
+### Marker syntax
 
-Use Elementor **Advanced > Attributes / Custom Attributes** with these values:
+The general syntax is:
 
-- `data-customID|h1NonRepeat` — main H1 destination; maps to DOCX Heading 1.
-- `data-customID|sectionTitleNonRepeat` — major section-title destination; maps to DOCX Heading 2.
-- `data-customID|hNonRepeat` — normal heading destination; maps to DOCX Heading 3.
-- `data-customID|pNonRepeat` — paragraph/content destination.
-- `data-customID|repeatableItem` — repeatable widget destination.
+```text
+data-customID|MARKER_NAME
+```
 
-The plugin reads the value after the pipe (`|`).
+The parser reads the value after the first `|`.
 
-## Unique DOCX repeatable sections
+For example:
 
-A DOCX paragraph is a repeatable boundary when it is both:
+```text
+data-customID|h3
+```
 
-1. a Word heading, and
-2. yellow font or yellow highlight.
+and
 
-Everything after that yellow heading belongs to the repeatable item until the next yellow heading.
+```text
+data-customID|h3|repeatable
+```
 
-For an `icon-box` marked `data-customID|repeatableItem`:
+are interpreted according to the marker parser's supported marker rules. The marker parser is deliberately tolerant of common Elementor attribute representations.
 
-- yellow heading -> `title_text`
-- following content -> `description_text`
+For the current production workflow, use the documented marker names above rather than inventing new marker names unless the generator code is also updated.
 
-The plugin clones the marked widget itself when widget-level cloning is required. When **Widgets per section** is enabled and the template contains a repeatable section, the containing Section is cloned so the complete visual card layout is preserved.
+## Paragraph behavior
 
-## Widgets per section
+`pNonRepeat` is semantic rather than a blind "next paragraph" replacement.
 
-Unique mode can use a **Widgets per section** value to control how many repeatable cards are placed in each generated Elementor Section.
+- **Text Editor:** receives body content associated with the mapped heading/block.
+- **Icon Box:** receives the heading and its associated body content through the icon-box fields.
+- **Toggle:** receives multiple heading/body pairs for FAQ-style content.
 
-For a four-card template, a value of `4` means:
+This design prevents paragraphs from drifting when a DOCX contains several headings between content blocks.
 
-- DOCX items 1–4 -> generated Section 1
-- DOCX items 5–8 -> generated Section 2
-- DOCX items 9–12 -> generated Section 3
+## Unique / repeatable content
 
-The source repeatable widgets are used as visual prototypes and are distributed round-robin when additional sections are created.
+A repeatable DOCX item is identified by a heading that is both a Word heading and marked with the configured yellow font/highlight convention.
+
+Everything after that yellow heading belongs to the repeatable item until the next yellow repeatable heading.
+
+For an Elementor widget marked as a repeatable item, the generator can clone the visual prototype and populate each generated item.
+
+### Icon Box repeatables
+
+For an Icon Box repeatable widget:
+
+- repeatable heading → `title_text`
+- associated body → `description_text`
+- widget styling, icon, link, spacing, and other Elementor settings remain based on the template prototype
+
+### Widgets per section
+
+When the template contains multiple repeatable card columns, **Widgets per section** controls how many generated cards are placed in each Elementor section.
+
+For a four-card prototype and a value of `4`:
+
+```text
+Items 1–4   → Section 1
+Items 5–8   → Section 2
+Items 9–12  → Section 3
+```
+
+Partial rows are centered while preserving the prototype card width.
 
 ## Alternating repeatable card colors
 
-When the repeatable card Columns use a two-color alternating pattern, the generator reads the pattern directly from the Elementor template.
+The generator can preserve a two-color alternating pattern found in the template.
 
 Example source pattern:
 
-`A / B / A / B`
+```text
+A / B / A / B
+```
 
-Generated sections become:
+Generated sections alternate the prototype pattern without rewriting templates that do not clearly contain a two-color alternating system.
 
-- Section 1: `A / B / A / B`
-- Section 2: `B / A / B / A`
-- Section 3: `A / B / A / B`
-- Section 4: `B / A / B / A`
+Supported color sources include Elementor global color tokens and literal Elementor color values.
 
-The algorithm only activates when the template actually contains an alternating two-color pattern. Templates with three or more colors, repeated non-alternating colors, or missing color values are left unchanged rather than being rewritten unexpectedly.
+## Media Library image pool
 
-### Supported color formats
-
-The detector supports both:
-
-- Elementor global color tokens such as `globals/colors?id=primary` and `globals/colors?id=secondary`.
-- Literal Elementor `background_overlay_color` values.
-- Literal/global `background_color` values when no overlay color is defined.
-
-The generator preserves whether the source color was stored as a global token or as a literal setting.
-
-### Color and image independence
-
-The Media Library Image Pool is independent from color assignment. A section can receive randomized, non-duplicated images while its card colors still follow the template's alternating pattern.
-
-## Media Library Image Pool
-
-Unique-mode repeatable sections can use selected Media Library images.
+Unique repeatable sections can optionally use selected WordPress Media Library images.
 
 Behavior:
 
-- Images are validated as WordPress image attachments before use.
-- Images are randomized separately for each repeatable section.
-- The same selected pool image is not assigned twice within one generated section.
+- Selected images are validated as image attachments.
+- Images are randomized independently for repeatable sections.
+- A single generated section does not receive the same pool image twice when enough usable images exist.
 - Images may be reused in another generated section or another generated page.
-- If the pool has fewer usable images than the number of cards, the available pool images are used once and remaining cards keep their template image.
-- Non-repeatable template backgrounds are not changed by the repeatable image pool.
+- If the pool is smaller than the number of cards, remaining cards keep their template image.
+- Static, non-repeatable template backgrounds are not replaced by the repeatable image pool.
 
-## Non-repeat content
+## Saved Elementor JSON templates
 
-Non-repeat content is mapped according to the semantic DOCX structure.
+The plugin remembers uploaded Elementor JSON templates in its WordPress uploads library.
 
-- `h1NonRepeat` maps to Heading 1.
-- `sectionTitleNonRepeat` maps to Heading 2.
-- `hNonRepeat` maps to Heading 3.
-- `pNonRepeat` adapts to the Elementor widget type.
-  - Text Editor receives the body of its mapped heading.
-  - Icon Box receives a heading plus body content.
-  - Toggle receives multiple heading/body pairs for FAQ entries.
+- Previously saved templates appear in the selector.
+- Uploading a JSON file saves it automatically.
+- Uploading another file with the same filename replaces the saved copy.
+- A queued job receives its own copy of the selected template.
+- Clearing the saved library does not delete generated pages or templates already copied into queued jobs.
+- Templates are validated before being stored.
 
-This prevents paragraphs from shifting or duplicating simply because a DOCX contains many headings between content blocks.
+## Automatic page-type detection
 
-## Generic mode
+When Auto Detect is used, the generator can classify each DOCX independently.
 
-Generic mode does not depend on yellow repeatable headings. It maps the DOCX's non-repeat content to the marked Elementor widgets using the document's H1/H2/H3 hierarchy.
+- DOCX with yellow repeatable headings → **Unique**
+- DOCX without yellow repeatable headings → **Generic**
 
-This makes Generic mode useful for templates that do not use repeatable markers.
+Saved JSON templates are classified from their Elementor structure:
+
+- Template containing the repeatable marker → **Unique**
+- Template without the repeatable marker → **Generic**
+
+Auto Detect can therefore process mixed batches of Generic and Unique DOCX files while selecting the matching template for each page.
 
 ## Queue processing
 
-Jobs are stored in the plugin queue and processed by WP-Cron.
+Generation is queued rather than forcing every page to be generated inside one browser request.
 
-New jobs also schedule a near-immediate single WP-Cron event so processing can start promptly, while the recurring worker remains as a backup.
+The plugin uses:
 
-If WP-Cron is delayed or disabled, the admin Queue panel provides **Process Queue Now** for manually processing one queued job.
+- a WordPress option-backed queue;
+- a recurring WP-Cron worker;
+- a near-immediate single event when a new job is queued;
+- a worker lock to avoid overlapping queue processing;
+- a small per-request job limit and time guard.
 
-## Elementor CSS and generated pages
+This keeps large batches from requiring one long-running admin request.
 
-After Elementor data is written, the plugin explicitly regenerates Elementor's post CSS and clears Elementor's file cache. This helps prevent generated pages from appearing extremely tall or narrow until they are manually opened in Elementor.
+## Generated-page tracking
 
-Pages created by the plugin are marked with `_wfebpg_generated` so the generated-page frontend CSS remains scoped to plugin-created pages.
+Pages created by the generator are marked with the `_wfebpg_generated` post meta value.
 
-## Template Validator
+That marker is used to:
 
-The admin Template Validator checks the Elementor JSON for:
+- identify generated pages;
+- scope the plugin's generated-page CSS;
+- populate the admin To-Do table;
+- provide page review links;
+- support the generated-page management workflow.
 
-- H1/H2/H3/non-repeat markers.
-- `repeatableItem` markers.
-- Repeatable Sections and Columns.
-- Image/background locations.
-- DOCX compatibility when a DOCX is supplied.
+The legacy `_wfebpg_` key is intentionally preserved in r2.0.0 for compatibility.
 
-The validator is read-only and does not modify the template.
+## Template validation
 
-## Created Pages To-Do
+The built-in validator can inspect an Elementor JSON template and optionally a DOCX file.
 
-After each page is generated, it is recorded in the **Newly Created Pages — To-Do** list on the admin screen.
+It reports information such as:
 
-Each entry provides quick links for:
+- content marker counts;
+- repeatable sections;
+- repeatable columns;
+- image/background locations;
+- repeatable image locations;
+- DOCX compatibility information;
+- blocking errors;
+- warnings.
 
-- Edit Page
-- Edit with Elementor
-- View
+Use the validator before a large batch when a new template has been created or modified.
 
-## Reset and rollback safety
+## Static template image replacement
 
-The **Clear Generated Pages Table** control only clears the plugin's To-Do table. It does not delete, trash, or otherwise modify any WordPress pages, and it does not clear logs.
+The generator supports filename-based replacement for static images in saved Elementor templates.
 
-Individual pages can be intentionally moved to the normal WordPress Trash with the per-row **Move to Trash** action in the To-Do table.
+The workflow allows you to:
 
-## Installation / update
+1. scan a saved template;
+2. review matching Media Library suggestions;
+3. manually choose replacements when required;
+4. save the mapping for that template;
+5. apply the mapping to generated template copies before page generation.
 
-1. Back up the current plugin and generated pages.
-2. Deactivate the previous plugin version if your WordPress installation requires it.
-3. Install the new plugin ZIP through **WordPress > Plugins > Add New > Upload Plugin**.
-4. Activate the plugin.
-5. Validate the Elementor template before a production batch.
-6. Run a small staging batch first.
+This is separate from the Dynamic Image Pool used by repeatable Unique sections.
 
-## Recommended template workflow
+## Phone links
 
-For a four-card visual grid:
+The generator includes phone-link processing for supported generated content. This allows phone numbers in generated page content to be converted into `tel:` links according to the plugin's existing rules.
 
-1. Create four Elementor Columns/cards.
-2. Put one `data-customID|repeatableItem` widget in each card.
-3. Use an alternating background/overlay pattern such as A/B/A/B.
-4. Set **Widgets per section** to `4`.
-5. Optionally select an Image Pool.
-6. Validate the template.
-7. Generate a small test batch before running a large DOCX batch.
+## Parent pages and existing slugs
 
-## Compatibility notes
+Generated pages can optionally be assigned a WordPress parent page.
 
-- WordPress: 6.0+
-- PHP: 7.4+
-- Elementor JSON structures can vary between Elementor versions and third-party widgets.
-- Always validate and test on staging before large production runs.
+When overwrite is disabled, the generator avoids unintentionally replacing an existing page and uses WordPress-safe slug handling for the new page.
 
-## Changelog
+Page titles preserve meaningful filename characters while WordPress continues to sanitize the URL slug separately.
 
-### 1.14.1 — Last-used templates and per-page Trash action
+## Rollback and cleanup
 
-- Remembers the last used Unique and Generic saved templates per administrator.
-- Restores those selections on later upload sessions.
-- Added a per-row **Move to Trash** action to the Newly Created Pages — To-Do table.
-- Moving a page to Trash removes only that page from the To-Do table; it does not permanently delete it.
-- Kept **Clear Generated Pages Table** safe: it only clears the table.
+The admin interface includes tools for:
 
-### 1.12.0 — Remembered JSON template library
+- reviewing generated pages;
+- moving selected generated pages to WordPress Trash;
+- clearing the generated-page To-Do table without deleting pages;
+- clearing plugin logs;
+- clearing saved JSON templates;
+- stopping an upload/queueing sequence before final submission.
 
-- Added persistent Elementor JSON template storage for convenient reuse.
-- Re-uploading a JSON file with the same filename replaces the remembered copy.
-- Added a separate **Clear Saved JSON Templates** control.
-- Queued jobs receive their own template copy, so later library changes do not affect queued work.
-- Validates uploaded JSON before saving it to the remembered library.
+These controls are intentionally separate so clearing tracking data does not silently delete WordPress content.
 
+## Developer documentation
 
-### 1.11.0 — Generator optimization and color algorithm cleanup
+Detailed technical notes are in the `docs/` directory:
 
-- Cached repeatable Column paths during the initial template scan.
-- Removed the redundant repeatable-section pre-scan.
-- Prevalidated Media Library image pools for reuse across generated sections.
-- Combined repeatable image/color writes into one Column traversal.
-- Cached/validated the two-color pattern once per prototype section.
-- Simplified alternating color selection to a constant-time slot calculation.
-- Fixed path traversal so it no longer relies on `end($path)` inside iteration.
-- Preserved global-token versus literal-color storage when swapping alternating colors.
-- Expanded documentation and troubleshooting guidance.
+- `docs/TEMPLATE-MARKERS.md` — marker syntax and content-mapping rules.
+- `docs/ARCHITECTURE.md` — file responsibilities and generation flow.
+- `docs/DEVELOPMENT.md` — safe maintenance, compatibility, and QA guidance.
+- `CHANGELOG.md` — release history and the r2.0.0 rebrand notes.
 
-### 1.10.0 — Alternating Repeatable Card Colors
+## Codebase layout
 
-- Detects alternating two-color repeatable card patterns from the Elementor template.
-- Preserves the first section's pattern and reverses it on the next generated section.
-- Continues alternating section by section.
-- Supports Elementor global color tokens and literal background/overlay colors.
-- Keeps image-pool randomization independent from color assignment.
-
-### 1.9.0 — Template validation and image pools
-
-- Added Template Validator admin screen.
-- Added optional DOCX compatibility validation.
-- Added Media Library Image Pool selection.
-- Added randomized repeatable image assignment.
-- Prevented duplicate pool images within the same generated repeatable section.
-
-### 1.8.0 — Partial repeatable sections, Elementor CSS, and reset
-
-- Removes unused prototype Columns in partial/final repeatable sections.
-- Regenerates Elementor CSS and clears Elementor's file cache after generation.
-- Added Reset Logs & Generated Pages.
-
-### 1.7.x and earlier
-
-See the existing plugin history for queue processing, semantic DOCX mapping, section-title mapping, created-page tracking, and earlier repeatable-section improvements.
-
-## Safety
-
-Install and test on staging first. Elementor JSON structures and third-party widgets can vary by Elementor version. The plugin publishes generated pages after queue processing.
-
-
-## v1.12.2 — Saved Template Selection Fix
-- Fixed saved JSON template selection so the selected filename is explicitly preserved in the generation form submission.
-- Selecting a remembered template no longer depends solely on the browser's handling of the `<select>` field.
-- New JSON uploads and same-name replacement behavior remain unchanged.
-
-## 1.12.3 — Reliable large-file uploads
-
-Version 1.12.3 changes the upload flow so Elementor JSON templates and DOCX files are uploaded individually before the generation form is submitted. This avoids PHP's `max_file_uploads` limit when many DOCX files are selected at once.
-
-- New JSON templates are uploaded and remembered automatically before queuing.
-- Previously saved JSON templates can still be selected without uploading a file.
-- Multiple DOCX files are uploaded one at a time, so batches larger than the server's normal PHP file-count limit are supported.
-- The queue form receives a temporary upload batch and copies those files into the normal job workspace before creating queued jobs.
-- Same-name JSON uploads continue to replace the saved template.
-
-## 1.12.5 — Center partial final repeatable sections
-
-- When the final repeatable section contains fewer cards than the configured section capacity, the remaining cards are centered across the prototype columns instead of starting from the far-left column.
-- For example, a four-card template with two final items uses the middle two card positions.
-- Existing card content, images, and alternating color behavior remain unchanged.
-
-
-
-### 1.12.6
-- Changed **Clear Generated Pages Table** so it only clears the plugin's generated-page To-Do table. It never deletes WordPress pages and does not clear logs.
-
-
-## v1.12.8 — Reliable centering for partial repeatable rows
-
-Partial final repeatable rows now keep the template's original Elementor column grid and use unused columns as invisible spacers. This avoids Elementor collapsing empty legacy columns and reliably centers 1, 2, or 3 cards in a 4-card row.
-
-The source-column selection uses the centered offset `ceil((prototype_count - card_count) / 2)`, so a four-column template places partial rows as:
-
-- 3 cards: blank, card, card, card
-- 2 cards: blank, card, card, blank
-- 1 card: blank, blank, card, blank
-
-## v1.12.7 — Center partial repeatable sections
-
-Partial repeatable rows are centered by adding transparent spacer columns while preserving the prototype card width. For a 4-card prototype, 3 cards are rendered as 12.5% spacer + 25% + 25% + 25% + 12.5% spacer; 2 cards use 25% side spacing; 1 card is centered with equal side spacing. Full rows are unchanged.
-
-
-## v1.12.9 — True centering for partial repeatable rows
-
-Partial repeatable sections now use equal half-width spacer columns on both sides of the remaining cards. For a four-card template, 3 cards render as 12.5% spacer + 25% + 25% + 25% + 12.5% spacer, producing true geometric centering within the section. Full sections remain unchanged.
-
-
-## v1.13.0 — True partial-row centering and remembered image pools
-
-- Partial repeatable rows are now centered by Elementor's actual flex container, so the entire group is centered in the section rather than placed in a left, middle, or right slot.
-- The original card width is preserved. A four-card 25% template with three cards now produces three 25% cards centered as a group.
-- The unused prototype columns are removed only from the partial generated section; full sections are unchanged.
-- Selected Media Library Image Pool IDs are remembered per WordPress admin user.
-- Returning to the generator restores the previous image selection and previews the saved images.
-- Clearing the image selection also clears the remembered selection.
-- The image pool is also saved when a generation job is submitted.
-
-
-## v1.14.0 — Automatic DOCX page-type detection and template mapping
-
-The generator can now classify each DOCX independently when **Auto Detect** is selected:
-
-- A DOCX with one or more **yellow-font headings** is classified as **Unique**.
-- A DOCX with no yellow repeatable headings is classified as **Generic**.
-- Mixed uploads can contain Unique and Generic DOCX files in the same batch.
-- Each detected DOCX is queued with the matching Elementor JSON template.
-
-### Automatic JSON template mapping
-
-Saved Elementor JSON templates are classified automatically from their structure:
-
-- A template containing `data-customID|repeatableItem` is classified as **Unique**.
-- A template without repeatable-item markers is classified as **Generic**.
-
-Auto Detect provides separate saved-template selectors for Unique and Generic templates. New Unique and Generic JSON files can also be uploaded and are remembered automatically.
-
-If a detected DOCX type has no matching template selected, the batch is stopped before jobs are queued. Manual **Unique Pages** and **Generic Pages** modes remain available as overrides.
-
-The upload progress also reports the number of DOCX files detected as Unique and Generic before the final queue submission.
-
-## Last-used Unique and Generic templates
-
-Auto Detect now remembers the last saved template used for each page type per WordPress administrator.
-
-- The last selected/saved **Unique** template is restored automatically on the next upload session.
-- The last selected/saved **Generic** template is restored automatically on the next upload session.
-- The remembered selections are stored per admin user.
-- If a remembered template has been removed from the saved-template library, the selector falls back to no selection.
-- Uploading or selecting a different template updates that type's remembered choice.
-
-## Move generated pages to Trash
-
-Each row in **Newly Created Pages — To-Do** now has a **Move to Trash** action.
-
-- It moves only that selected WordPress page to the normal WordPress Trash.
-- It does not permanently delete the page.
-- The trashed page is removed from the plugin's To-Do table.
-- The action requires the current administrator to have permission to delete that page and uses a WordPress nonce for protection.
-- The separate **Clear Generated Pages Table** control still only clears the table and does not move or delete any pages.
+```text
+wolf-forge-elementor-page-generator/
+├── wolf-forge-elementor-page-generator.php  # Plugin bootstrap
+├── README.md                                 # User/developer overview
+├── CHANGELOG.md                              # Release history
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DEVELOPMENT.md
+│   └── TEMPLATE-MARKERS.md
+├── admin/
+│   └── admin-page.php                        # Admin screens and handlers
+├── assets/
+│   ├── admin.css
+│   ├── admin.js
+│   └── frontend.css
+└── includes/
+    ├── class-docx-reader.php                 # DOCX parsing
+    ├── class-generator.php                   # Page generation engine
+    ├── class-logger.php                      # Logging
+    ├── class-phone-linker.php                # Phone link conversion
+    └── class-template.php                    # Elementor JSON helpers
+```
+
+## Compatibility note for developers
+
+Do not rename the existing `WFEBPG_` classes/functions, `wfebpg_*` actions, options, cron hooks, or post-meta keys as part of a normal branding update. Those identifiers are implementation details that are already persisted in WordPress sites and jobs.
+
+The visible product name is now **Wolf Forge Elementor Page Generator**, while the internal identifiers remain stable by design.
+
+## QA checklist
+
+Before deploying a new build:
+
+- Validate PHP syntax for every PHP file.
+- Confirm the plugin header reports `r2.0.0`.
+- Confirm the admin title shows **Wolf Forge Elementor Page Generator**.
+- Load the generator screen without PHP notices or fatal errors.
+- Load a saved JSON template.
+- Validate a template with the built-in validator.
+- Generate at least one Generic page.
+- Generate at least one Unique page.
+- Confirm repeatable Icon Box title and description content populate correctly.
+- Confirm Toggle/FAQ content remains aligned.
+- Confirm Media Library image-pool behavior.
+- Confirm queued jobs process through WP-Cron or **Process Queue Now**.
+- Confirm generated pages appear in the To-Do table.
+- Confirm Elementor editing still opens normally.
+- Confirm generated-page frontend CSS is scoped to generated pages.
+
+## License / distribution
+
+This package contains the Wolf Forge Elementor Page Generator codebase. Add the project's chosen license text before public redistribution if the distribution terms require an explicit license file.

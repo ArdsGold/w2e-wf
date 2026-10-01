@@ -1,5 +1,11 @@
 <?php
-if (!defined('ABSPATH')) exit;
+/**
+ * Elementor JSON parsing and marker helpers.
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 class WFEBPG_Template {
     public static function decode($json) {
@@ -8,9 +14,15 @@ class WFEBPG_Template {
             throw new Exception('Invalid Elementor JSON: ' . json_last_error_msg());
         }
 
-        if (isset($data['content']) && is_array($data['content'])) return $data['content'];
-        if (isset($data['elements']) && is_array($data['elements'])) return $data['elements'];
-        if (is_array($data) && isset($data[0])) return $data;
+        if (isset($data['content']) && is_array($data['content'])) {
+            return $data['content'];
+        }
+        if (isset($data['elements']) && is_array($data['elements'])) {
+            return $data['elements'];
+        }
+        if (is_array($data) && isset($data[0])) {
+            return $data;
+        }
 
         throw new Exception('Unsupported Elementor JSON structure. Expected exported template, content, elements, or raw element array.');
     }
@@ -22,9 +34,15 @@ class WFEBPG_Template {
     /** Return page-level settings from an Elementor JSON export. */
     public static function page_settings($json) {
         $data = json_decode($json, true);
-        if (!is_array($data)) return [];
-        if (isset($data['page_settings']) && is_array($data['page_settings'])) return $data['page_settings'];
-        if (isset($data['settings']) && is_array($data['settings']) && isset($data['elements'])) return $data['settings'];
+        if (!is_array($data)) {
+            return [];
+        }
+        if (isset($data['page_settings']) && is_array($data['page_settings'])) {
+            return $data['page_settings'];
+        }
+        if (isset($data['settings']) && is_array($data['settings']) && isset($data['elements'])) {
+            return $data['settings'];
+        }
         return [];
     }
 
@@ -39,8 +57,12 @@ class WFEBPG_Template {
         $candidates = [];
 
         foreach (['customID', 'custom_id', 'data-customID', 'data_customID'] as $key) {
-            if (isset($el[$key])) $candidates[] = $el[$key];
-            if (isset($settings[$key])) $candidates[] = $settings[$key];
+            if (isset($el[$key])) {
+                $candidates[] = $el[$key];
+            }
+            if (isset($settings[$key])) {
+                $candidates[] = $settings[$key];
+            }
         }
 
         if (isset($settings['_attributes']) && is_string($settings['_attributes'])) {
@@ -49,7 +71,9 @@ class WFEBPG_Template {
 
         foreach ($candidates as $candidate) {
             $candidate = trim((string) $candidate);
-            if ($candidate === '') continue;
+            if ($candidate === '') {
+                continue;
+            }
             if (strpos($candidate, '|') !== false) {
                 $parts = explode('|', $candidate, 2);
                 return trim($parts[1]);

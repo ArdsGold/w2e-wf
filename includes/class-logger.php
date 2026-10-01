@@ -1,4 +1,8 @@
 <?php
+/**
+ * Small WordPress-option based logger used by the generator and admin UI.
+ */
+
 if (!defined('ABSPATH')) exit;
 class WFEBPG_Logger {
     public static function log($message,$level='info'){

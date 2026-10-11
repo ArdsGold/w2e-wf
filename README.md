@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.2.0  
+**Version:** r2.2.1
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  

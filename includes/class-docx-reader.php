@@ -223,7 +223,7 @@ class WFEBPG_DOCX_Reader {
                 }
 
                 $entry = unpack(
-                    'vversion_made/vversion_needed/vflags/vmethod/vmodified_time/vmodified_date/Vcrc/Vcompressed_size/Vuncompressed_size/vname_length/vextra_length/vcomment_length/vdisk/Vinternal_attributes/Vexternal_attributes/Vlocal_offset',
+                    'vversion_made/vversion_needed/vflags/vmethod/vmodified_time/vmodified_date/Vcrc/Vcompressed_size/Vuncompressed_size/vname_length/vextra_length/vcomment_length/vdisk/vinternal_attributes/Vexternal_attributes/Vlocal_offset',
                     substr($header, 4)
                 );
                 if (!$entry) {

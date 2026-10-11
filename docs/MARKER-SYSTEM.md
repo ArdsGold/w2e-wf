@@ -48,26 +48,28 @@ data-customID|h3|p|repeatable
 data-customID|h3|repeat
 ```
 
-## Repeatable parent container model
+## Structural repeat element model
 
-The preferred repeatable design is to put the repeat marker on the **parent Elementor Section/Container that represents one complete item**:
+For new r2.2.0 templates, put the structural repeat marker on the **Elementor element that represents one complete item**. This may be a Container, Section, or Column:
 
 ```text
-data-customID|h3|repeat
+data-customID|repeat
 ```
 
 Example:
 
 ```text
-Container
-  data-customID|h3|repeat
+Container / Column
+  data-customID|repeat
   ├── Heading widget
+  │   data-customID|h3
   └── Text Editor widget
+      data-customID|p
 ```
 
-The child Heading and Text Editor **do not need markers**.
+The child Heading and Text Editor use ordinary content markers. The repeat marker belongs only to the visual item boundary.
 
-For each matching H3 in the DOCX, the generator:
+For each matching record in the DOCX scope, the generator:
 
 1. Clones the marked parent container.
 2. Finds the **first Heading widget** inside that container.
@@ -75,7 +77,9 @@ For each matching H3 in the DOCX, the generator:
 4. Finds the **first Text Editor widget** inside that container.
 5. Places all paragraphs belonging to that H3 into that Text Editor.
 
-Therefore this works for cards, service boxes, process steps, benefits, FAQ-style layouts, and other designs without knowing the widget's semantic name.
+This works for cards, service boxes, process steps, benefits, and other layouts.
+
+The **Widgets per section** setting controls the number of generated cards per row. If the template has prototypes in multiple rows, all prototypes are reused in order. Generated repeat Columns use the configured row width; an incomplete final row is centered. A scope with no matching records produces no repeat items.
 
 ## Widget-level repeatable Text Editor
 
@@ -179,32 +183,32 @@ When a repeatable H3 marker appears inside a template region associated with an 
 
 This is based on heading hierarchy and template marker position, not on section names such as “Services” or “Why Choose Us”.
 
-## Internal repeaters such as Toggle
+## Internal repeaters such as Toggle and Accordion
 
-Some Elementor widgets already contain their own repeated item collection. A Toggle is one example: it has one Custom Attributes field on the parent widget, while its individual Toggle Items live inside the widget's `tabs` setting.
+Toggle and Accordion widgets store their items in the widget's `tabs` setting and share the same marker.
 
-Mark the Toggle itself with:
+Mark either widget with:
 
 ```text
-data-customID|h3|repeat
+data-customID|h3|p|repeat
 ```
 
-The generator does **not** clone the Toggle widget. Instead, it replaces its internal Toggle Items with one item for each matching H3 record:
+The generator does **not** clone the widget. It replaces its internal items with one item per matching H3:
 
 ```text
-Toggle
+Toggle or Accordion
   data-customID|h3|repeat
 
-  H3 #1 -> Toggle Item #1
-  H3 #2 -> Toggle Item #2
-  H3 #3 -> Toggle Item #3
+  H3 #1 -> Item #1
+  H3 #2 -> Item #2
+  H3 #3 -> Item #3
 ```
 
-Each item's title receives the H3 heading and its content receives all paragraphs following that H3 until the next heading. The Toggle keeps its existing visual, icon, typography, schema, and other settings.
+Each item uses the H3 as its title and the following paragraphs as its content. Existing widget settings are preserved.
 
-The repeatable scope is determined by the Toggle's position relative to marked H2 sections in the Elementor template. This allows, for example, a Services `h3|repeat` container and an FAQ `h3|repeat` Toggle to consume different H2 sections from the same DOCX.
+The widget's position relative to marked H2 sections determines its scope. For example, a Services container and FAQ Accordion can map to separate H2 sections in one DOCX.
 
-The current internal-repeater implementation supports Elementor Toggle. The same architecture can be extended to other Elementor widgets that own internal repeated item arrays without changing the DOCX marker rules.
+Internal repeaters support Elementor Toggle and Accordion.
 
 ## Non-repeat heading + paragraph containers
 
@@ -214,7 +218,7 @@ A Section/Container can also declare a fixed heading + paragraph unit:
 data-customID|h3|p
 ```
 
-The generator finds the first Heading widget and first Text Editor inside that marked container and fills them from the next matching H3 block.
+The generator fills the first Heading and Text Editor inside the container from the next matching H3 block.
 
 The container is **not cloned** because `repeat` was not requested.
 
@@ -268,8 +272,6 @@ Upload both the Elementor JSON and DOCX in the Template Validator to see a mappi
 
 
 ## Release note
-
-This marker contract is stable across the r2.0.1b rebrand. Existing legacy marker spellings remain supported.
 
 ### Combined heading + paragraph markers on Text Editor widgets
 

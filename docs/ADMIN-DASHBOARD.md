@@ -1,84 +1,51 @@
-# Admin Dashboard Guide — r2.1.0
+# Admin Dashboard Guide — r2.2.0
 
-## Overview
+The dashboard has five tabs. Switch tabs without reloading the page.
 
-Version 2.1.0 reorganizes the Wolf Forge Elementor Page Generator admin screen into five client-side tabs. The change is intentionally UI-focused: the existing generation, repeat-marker, queue, template, image-pool, image-mapping, validation, and page-processing contracts remain in place.
+## Page Generation
 
-## Tabs
+Upload DOCX files and select or upload an Elementor JSON template. Pages are queued for background processing. Optional controls include the image pool, parent page, and overwrite setting.
 
-### Page Generation
+The right-side preview updates automatically when the template changes. It shows the Elementor structure, not a rendered screenshot. Hover over a marked element to view its `data-customID` marker. With no template selected, the preview is empty.
 
-Contains the existing page-generation workflow, including DOCX uploads, template selection, saved templates, image-pool controls, parent-page settings, overwrite behavior, and queue processing.
+Choose either a saved template or a new upload. To use an uploaded file as a saved template, add it to the library in Template Validator.
 
-The Saved Elementor JSON selector and the Upload New JSON Template control are mutually exclusive. When a saved template is selected, the upload control is disabled. When a new JSON template is chosen, the saved-template selector is disabled until the upload is cleared.
+The DOCX Compatibility box reports whether the site's PHP has `ZipArchive`. If it does not, the plugin enables the zip-free fallback for your account. The fallback requires PHP zlib.
 
-### Template Image Replacement
+## Template Image Replacement
 
-Uses the same shared selected template as Page Generation and Template Validator. The detailed image scan remains available through **Scan Template Images**. Image previews can be opened in a larger lightbox view.
+Match images in a saved template to Media Library images. Review suggested matches and apply the ones you want. This tool is separate from the Image Pool.
 
-The tab can show an orange warning when the selected template has unresolved image mappings. This status is calculated from the saved template without requiring the user to click the scan button.
+The tab warns when the selected template has unresolved image mappings.
 
-### New Pages
+## New Pages
 
-Contains the generated-page table and its existing actions: Edit, Edit with Elementor, View, Move to Trash, and clearing the generated-page To-Do table.
+Review generated pages, edit them in WordPress or Elementor, view them, or move them to Trash. Clearing the generated-page table removes only the plugin's tracking records.
 
-When a new page is successfully generated, the tab receives a light-green notification. The notification is acknowledged when the New Pages tab is opened. Background queue completion is also detected while the dashboard remains open.
+A notification appears when a new page is generated. Open this tab to acknowledge it.
 
-### Template Validator
+## Template Validator
 
-Contains the template validator and Saved Template management. A template can be uploaded directly into the Saved Templates library without generating a page. Saved templates can be renamed or deleted from this area.
+Select or upload a template and choose **Preview & Validate Template** to see its structure and validation results. Add a DOCX to check marker and content compatibility.
 
-The tab status has three states:
+The preview shows the Elementor structure. Hover over a marked element to view its `data-customID` marker.
 
-- **Normal:** no validator warnings or errors.
-- **Orange:** one or more validator warnings.
-- **Red:** one or more validator errors; red takes priority if warnings and errors are both present.
+Manage saved templates here. Uploading a template to the library does not generate a page. Renaming a template updates its image mappings; deleting it removes only the saved template.
 
-The status is calculated from the persistent selected template in the background. The **Validate Template** button remains available for the detailed validation report.
+The tab is orange when the selected template has warnings and red when it has errors. Errors take priority. The status updates from the selected saved template.
 
-### Logs
+## Logs
 
-Contains the existing plugin log table plus level filtering and message search.
+Filter logs by level or search their messages. The tab turns red when a new error is recorded; opening Logs acknowledges the notification.
 
-A newly detected error-level log entry turns the Logs tab red. Opening Logs acknowledges the notification. Historical errors do not permanently keep the tab red once acknowledged.
+## Shared template selection
 
-## Shared template state
+Page Generation, Template Image Replacement, and Template Validator share the selected saved template. Changing it in one tab updates the others. Uploading to the library selects the new template; renaming or deleting the active template updates or clears the selection.
 
-Page Generation, Template Image Replacement, and Template Validator use one shared selected saved-template value. Changing the selection in any of those areas updates the others without a full admin-page reload.
+## Troubleshooting
 
-Uploading a new template to the Saved Templates library automatically selects it as the shared template. Renaming the active template updates the shared selection. Deleting the active template clears the shared selection.
+- If a queue is stuck, choose **Process Queue Now** and check Logs.
+- If content is missing, verify its marker and run validation with the same DOCX.
+- If an image is not replaced, confirm the mapping is saved for the selected template.
 
-## Tab switching and performance
-
-Tabs are switched client-side. No WordPress page navigation is required to move between the five sections. The last active tab is remembered in the browser session when possible.
-
-Status polling is limited to lightweight dashboard notifications. It does not replace the existing generation or validation logic.
-
-## Status colors
-
-| Tab | State | Meaning |
-|---|---|---|
-| Template Image Replacement | Orange | Selected template has unresolved image-replacement work. |
-| Template Validator | Orange | Selected template has validation warnings. |
-| Template Validator | Red | Selected template has validation errors. |
-| New Pages | Light green | A newly generated page has not yet been acknowledged by opening New Pages. |
-| Logs | Red | A newly detected error-level log entry has not yet been acknowledged by opening Logs. |
-
-## Release QA checklist
-
-Before production deployment, verify:
-
-1. Switch between all five tabs without a page reload.
-2. Select a saved template in each of the three template selectors and confirm they remain synchronized.
-3. Upload a JSON to the Saved Templates library and confirm it becomes the shared selection without generating a page.
-4. Rename and delete a saved template from Template Validator.
-5. Confirm unresolved template images turn the Image Replacement tab orange without clicking Scan.
-6. Confirm validator warnings turn Validator orange and validator errors turn it red without clicking Validate.
-7. Generate a page and confirm New Pages turns light green until opened.
-8. Create a real error-level log entry in a staging environment and confirm Logs turns red until opened.
-9. Open image previews in Template Image Replacement.
-10. Verify generation, repeat markers, queue processing, and image mapping still behave as before.
-
-## Developer note
-
-The temporary **Test Error Notification** control used during r2.1.0 development is intentionally removed from the release build. Error notifications should be tested with a controlled staging error or automated integration test rather than a production-facing debug control.
+For marker syntax and mapping rules, see [`MARKER-SYSTEM.md`](MARKER-SYSTEM.md). For installation and queue setup, see [`INSTALLATION.md`](INSTALLATION.md).

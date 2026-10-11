@@ -34,6 +34,9 @@ add_action('admin_enqueue_scripts', function($hook){
         'newPagesNonce' => wp_create_nonce('wfebpg_new_pages_status'),
         'logsErrorNonce' => wp_create_nonce('wfebpg_logs_error_status'),
         'validatorStatusNonce' => wp_create_nonce('wfebpg_validator_status'),
+        'zipFallbackNonce' => wp_create_nonce('wfebpg_save_zip_fallback'),
+        'templatePreviewNonce' => wp_create_nonce('wfebpg_template_preview'),
+        'validatorNonce' => wp_create_nonce('wfebpg_validate_template'),
     ]);
     wp_enqueue_style('wfebpg-admin', WFEBPG_URL.'assets/admin.css', [], WFEBPG_VERSION);
 });
@@ -41,7 +44,6 @@ add_action('admin_post_wfebpg_generate','wfebpg_handle_generate');
 add_action('admin_post_wfebpg_process_queue_now','wfebpg_process_queue_now');
 add_action('admin_post_wfebpg_clear_logs','wfebpg_clear_logs');
 add_action('admin_post_wfebpg_reset_generated','wfebpg_reset_generated');
-add_action('admin_post_wfebpg_rollback','wfebpg_rollback');
 add_action('admin_post_wfebpg_trash_generated','wfebpg_trash_generated');
 add_action('admin_post_wfebpg_clear_templates','wfebpg_clear_templates');
 add_action('wp_ajax_wfebpg_save_template','wfebpg_ajax_save_template');
@@ -58,9 +60,17 @@ add_action('wp_ajax_wfebpg_get_new_pages_status','wfebpg_ajax_get_new_pages_stat
 add_action('wp_ajax_wfebpg_mark_new_pages_seen','wfebpg_ajax_mark_new_pages_seen');
 add_action('wp_ajax_wfebpg_get_logs_error_status','wfebpg_ajax_get_logs_error_status');
 add_action('wp_ajax_wfebpg_mark_logs_error_seen','wfebpg_ajax_mark_logs_error_seen');
+add_action('wp_ajax_wfebpg_get_validator_status','wfebpg_ajax_get_validator_status');
+add_action('wp_ajax_wfebpg_preview_template','wfebpg_ajax_preview_template');
+add_action('wp_ajax_wfebpg_validate_template','wfebpg_ajax_validate_template');
+add_action('wp_ajax_wfebpg_save_zip_fallback','wfebpg_ajax_save_zip_fallback');
 
 function wfebpg_admin(){
     if(!current_user_can('manage_options'))return;
+    $ziparchive_available=class_exists('ZipArchive');
+    if(!$ziparchive_available){
+        update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',1);
+    }
     $result = null;
     $error = '';
     if (!empty($_POST['wfebpg_validate_template'])) {
@@ -79,7 +89,12 @@ function wfebpg_admin(){
             }
             if ($json === false || $json === '') throw new Exception('Unable to read the template file.');
             $doc = null;
-            if (!empty($_FILES['validator_docx']['tmp_name'])) $doc = WFEBPG_DOCX_Reader::read($_FILES['validator_docx']['tmp_name']);
+            if (!empty($_FILES['validator_docx']['tmp_name'])) {
+                $doc = WFEBPG_DOCX_Reader::read(
+                    $_FILES['validator_docx']['tmp_name'],
+                    !$ziparchive_available || (bool)get_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',true)
+                );
+            }
             $result = WFEBPG_Generator::validate_template_json($json, $doc);
         } catch (Throwable $e) {
             $error = $e->getMessage();
@@ -94,6 +109,7 @@ function wfebpg_admin(){
     if($last_template && !wfebpg_find_saved_template($last_template))$last_template='';
     $saved_image_ids=array_values(array_unique(array_filter(array_map('absint',(array)get_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',true)))));
     $image_pool_enabled=(bool)get_user_meta(get_current_user_id(),'wfebpg_image_pool_enabled',true);
+    $zip_free_fallback=!$ziparchive_available || (bool)get_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',true);
     $active_tab=sanitize_key($_POST['wfebpg_active_tab']??($_GET['tab']??'generation'));
     $allowed_tabs=['generation','image-replacement','new-pages','validator','logs'];
     if(!in_array($active_tab,$allowed_tabs,true))$active_tab='generation';
@@ -139,16 +155,14 @@ function wfebpg_admin(){
     </nav>
 
     <div class="wfebpg-tab-panel <?php echo $active_tab==='generation'?'is-active':''; ?>" data-tab-panel="generation">
-        <p>Upload DOCX content and an Elementor JSON template. Jobs are queued and processed in the background to reduce timeouts.</p>
+        <div class="wfebpg-generation-layout">
+        <div class="wfebpg-generation-main">
+        <p>Upload DOCX files and an Elementor JSON template. Pages are queued for background processing.</p>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" enctype="multipart/form-data">
             <input type="hidden" name="action" value="wfebpg_generate"><?php wp_nonce_field('wfebpg_generate'); ?>
             <table class="form-table">
-                <tr><th>Page Generation</th><td>
-                    <input type="hidden" name="mode" value="auto">
-                    <strong>Automatic</strong> — one Elementor template is used for every DOCX. The plugin reads the document structure and follows the markers in the Elementor template.
-                    <p class="description">No Generic/Unique selection is required. For repeatable cards, mark the parent Section/Container with <code>data-customID|h3|repeat</code> (or h1/h2). The first Heading and first Text Editor inside it are populated automatically.</p>
-                </td></tr>
-                <tr><th>DOCX Files</th><td><input type="file" name="docx[]" id="wfebpg-docx-upload" accept=".docx" multiple required><input type="hidden" name="docx_batch" id="wfebpg-docx-batch" value=""><p class="description">Upload any mix of DOCX files. Each file is interpreted independently using the same Elementor template.</p></td></tr>
+                <input type="hidden" name="mode" value="auto">
+                <tr><th>DOCX Files</th><td><input type="file" name="docx[]" id="wfebpg-docx-upload" accept=".docx" multiple required><input type="hidden" name="docx_batch" id="wfebpg-docx-batch" value=""><p class="description">Each DOCX is processed separately with the selected template.</p></td></tr>
                 <tr><th>Elementor JSON Template</th><td>
                     <label for="wfebpg-saved-template"><strong>Use a previously uploaded template</strong></label><br>
                     <select name="saved_template" id="wfebpg-saved-template" style="min-width:420px;max-width:100%;margin-top:6px">
@@ -164,27 +178,35 @@ function wfebpg_admin(){
                         <button type="button" class="button wfebpg-clear-uploaded-template" id="wfebpg-clear-template-upload" style="display:none">Clear Uploaded Template</button>
                     </div>
                     <input type="hidden" name="saved_template_choice" id="wfebpg-saved-template-choice" value="">
-                    <p id="wfebpg-template-source-status" class="description">Choose either a saved Elementor template or upload a new JSON template. Only one template source can be active at a time.</p>
-                    <p class="description">The same template can generate pages with or without repeatable content. Only elements with <code>data-customID</code> are populated; unmarked elements are left untouched.</p>
+                    <p id="wfebpg-template-source-status" class="description">Select a saved template or upload a JSON file. Use one source at a time.</p>
+                    <p class="description">Only elements marked with <code>data-customID</code> receive content. Other elements stay unchanged.</p>
                     <?php if (!empty($saved_templates)): ?>
                         <p><a class="button button-link-delete" href="<?php echo esc_url($clear_templates_url); ?>" onclick="return confirm('Clear all remembered Elementor JSON templates? This does not affect templates already copied into queued jobs.');">Clear Saved JSON Templates</a></p>
                     <?php endif; ?>
                 </td></tr>
-                <tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" value="4" min="1" max="100" style="width:80px"></label><p class="description">Maximum number of legacy repeatable card groups per Elementor section. Parent-container repeatables are cloned as their own complete content unit; the first Heading and Text Editor inside each parent are populated automatically.</p></td></tr>
+                <tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" value="4" min="1" max="100" style="width:80px"></label><p class="description">Sets the limit for legacy repeatable card groups. Structural <code>data-customID|repeat</code> elements match their DOCX records; child <code>h3</code>/<code>p</code> markers fill each copy.</p></td></tr>
+                <tr><th>DOCX Compatibility</th><td>
+                    <div class="wfebpg-zip-status <?php echo $ziparchive_available?'is-available':'is-unavailable'; ?>" role="status" aria-live="polite">
+                        <strong><?php echo $ziparchive_available?'PHP ZipArchive is available':'PHP ZipArchive was not detected'; ?></strong>
+                        <p><?php echo $ziparchive_available?'DOCX files will use ZipArchive.':'ZipArchive is missing, so the fallback was enabled and saved for your account.'; ?></p>
+                    </div>
+                    <label><input type="checkbox" name="zip_free_fallback" id="wfebpg-zip-free-fallback" value="1" <?php checked($zip_free_fallback); ?> <?php disabled(!$ziparchive_available); ?>> Enable zip-free DOCX fallback</label>
+                    <p class="description">The fallback requires PHP zlib and supports standard, unencrypted DOCX files. When ZipArchive is available, this setting is saved for your account.</p>
+                </td></tr>
                 <tr><th>Image Pool</th><td>
                     <label class="wfebpg-toggle"><input type="checkbox" name="image_pool_enabled" id="wfebpg-image-pool-enabled" value="1" <?php checked($image_pool_enabled); ?>> <strong>Enable Media Library Image Pool</strong></label>
-                    <p class="description">Randomly assign selected Media Library images to repeatable card sections. Images are not duplicated within the same generated section.</p>
+                    <p class="description">Randomly assign selected Media Library images to repeatable sections. An image is not reused within the same section.</p>
                     <div id="wfebpg-image-pool-panel" class="wfebpg-image-pool-panel" style="display:none">
                         <input type="hidden" name="image_pool_ids" id="wfebpg-image-pool-ids" value="<?php echo esc_attr(implode(",",$saved_image_ids)); ?>">
                         <button type="button" class="button" id="wfebpg-select-images">Select Images from Media Library</button>
                         <button type="button" class="button-link-delete" id="wfebpg-clear-images" style="margin-left:10px">Clear Selection</button>
                         <div id="wfebpg-image-selection-count" class="description" style="margin-top:8px">No images selected.</div>
                         <div id="wfebpg-image-preview" class="wfebpg-image-preview"></div>
-                        <p class="description">The same image can be used again in another section or another page. Only duplicates inside the same repeatable section are prevented.</p>
+                        <p class="description">Images may repeat across sections and pages, but not within the same repeatable section.</p>
                     </div>
                 </td></tr>
                 <tr><th>Parent Page</th><td><select name="parent"><option value="0">— No Parent —</option><?php foreach($pages as $p):?><option value="<?php echo esc_attr($p->ID);?>"><?php echo esc_html($p->post_title);?></option><?php endforeach;?></select></td></tr>
-                <tr><th>Existing Slugs</th><td><label><input type="checkbox" name="overwrite" value="1"> Overwrite matching existing pages</label><p class="description">Otherwise a short suffix is added to avoid overwriting.</p></td></tr>
+                <tr><th>Existing Slugs</th><td><label><input type="checkbox" name="overwrite" value="1"> Overwrite matching existing pages</label><p class="description">If unchecked, a suffix is added to prevent overwriting.</p></td></tr>
             </table>
             <p><button type="submit" class="button button-primary button-hero">Queue Pages</button> <button type="button" class="button" id="wfebpg-stop-queueing" style="display:none;border-color:#b32d2e;color:#b32d2e">Stop Queueing</button> <span id="wfebpg-queue-status" class="description"></span></p>
         </form>
@@ -196,11 +218,19 @@ function wfebpg_admin(){
             <p class="description">No WP-Cron worker is currently scheduled.</p>
         <?php endif; ?>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_process_queue_now"><?php wp_nonce_field('wfebpg_process_queue_now');?><button class="button button-primary" <?php disabled(empty($q)); ?>>Process Queue Now</button> <span class="description">Processes one queued job immediately.</span></form>
+        </div>
+        <aside class="wfebpg-generation-preview wfebpg-template-preview-widget" data-template-select="#wfebpg-saved-template" data-template-upload="#wfebpg-template-upload" data-auto-preview="1" aria-labelledby="wfebpg-template-preview-heading">
+            <h2 id="wfebpg-template-preview-heading">Page Template Preview</h2>
+            <p class="description">Preview updates automatically. Hover over an element to view its <code>data-customID</code> marker.</p>
+            <p id="wfebpg-template-preview-status" class="description wfebpg-preview-status" role="status" aria-live="polite">No template selected.</p>
+            <div id="wfebpg-template-preview-canvas" class="wfebpg-template-preview-canvas wfebpg-preview-canvas" aria-label="Elementor template structure preview"></div>
+        </aside>
+        </div>
     </div>
 
     <div class="wfebpg-tab-panel <?php echo $active_tab==='image-replacement'?'is-active':''; ?>" data-tab-panel="image-replacement">
         <h2>Template Image Replacement</h2>
-        <p>Map images already inside a saved Elementor JSON template to images in your Media Library. The plugin suggests matches using filename similarity; you choose whether to apply each suggestion. This is separate from the Dynamic Image Pool.</p>
+        <p>Match images in a saved template to Media Library images. Review and apply suggested matches. This is separate from the Image Pool.</p>
         <div class="wfebpg-template-image-map-panel">
             <select id="wfebpg-image-map-template" style="min-width:420px;max-width:100%">
                 <option value="">— Select a saved template —</option>
@@ -215,7 +245,7 @@ function wfebpg_admin(){
     </div>
 
     <div class="wfebpg-tab-panel <?php echo $active_tab==='new-pages'?'is-active':''; ?>" data-tab-panel="new-pages">
-        <h2>Pages Generated</h2><p>Use these links to open a generated page in WordPress or Elementor for final review and editing.</p>
+        <h2>Pages Generated</h2><p>Open generated pages in WordPress or Elementor to review and edit them.</p>
         <table class="widefat striped" style="margin-top:10px"><thead><tr><th>Created</th><th>Page</th><th>Actions</th></tr></thead><tbody>
         <?php if(empty($created_pages)):?><tr><td colspan="3">No generated pages yet.</td></tr><?php else: foreach(array_slice($created_pages,0,100) as $cp): $cp_id=absint($cp['id']??0); if(!$cp_id)continue; ?><tr><td><?php echo esc_html($cp['time']??'');?></td><td><?php echo esc_html($cp['title']??get_the_title($cp_id));?></td><td><a class="button button-small" href="<?php echo esc_url(get_edit_post_link($cp_id));?>">Edit Page</a> <a class="button button-small" href="<?php echo esc_url(admin_url('post.php?post='.$cp_id.'&action=elementor'));?>">Edit with Elementor</a> <a href="<?php echo esc_url(get_permalink($cp_id));?>" target="_blank" rel="noopener">View</a> <?php if(get_post_type($cp_id)==='page' && current_user_can('delete_post',$cp_id)): $trash_url=wp_nonce_url(admin_url('admin-post.php?action=wfebpg_trash_generated&id='.$cp_id),'wfebpg_trash_generated_'.$cp_id); ?><a class="button button-small wfebpg-danger-link" href="<?php echo esc_url($trash_url);?>" onclick="return confirm('Move this generated page to the WordPress Trash?');">Move to Trash</a><?php endif; ?></td></tr><?php endforeach; endif;?></tbody></table>
         <h2>Generated Pages Table</h2><form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_reset_generated"><?php wp_nonce_field('wfebpg_reset_generated');?><button class="button button-secondary wfebpg-danger-button" onclick="return confirm('Clear the generated-page To-Do table? No WordPress pages or logs will be deleted. Continue?');">Clear Generated Pages Table</button> <span class="description">Clears only this plugin's generated-page To-Do table. It does not delete WordPress pages or clear logs.</span></form>
@@ -223,7 +253,7 @@ function wfebpg_admin(){
 
     <div class="wfebpg-tab-panel <?php echo $active_tab==='validator'?'is-active':''; ?>" data-tab-panel="validator">
         <h2>Template Validator</h2>
-        <p>Validate an Elementor JSON template before generating pages. Optionally upload the DOCX that will be used with it to check structural compatibility.</p>
+        <p>Check an Elementor template before generating pages. Add a DOCX to check content and marker compatibility.</p>
         <?php if (!empty($_GET['wfebpg_template_action'])): ?><div class="notice notice-success is-dismissible"><p><?php echo esc_html(sanitize_text_field(wp_unslash($_GET['wfebpg_template_action']))); ?></p></div><?php endif; ?>
         <?php if ($error): ?><div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div><?php endif; ?>
         <?php if (!empty($_GET['wfebpg_template_error'])): ?><div class="notice notice-error is-dismissible"><p><?php echo esc_html(sanitize_text_field(wp_unslash($_GET['wfebpg_template_error']))); ?></p></div><?php endif; ?>
@@ -237,21 +267,29 @@ function wfebpg_admin(){
                         <option value="">— Upload a JSON template instead —</option>
                         <?php foreach ($saved_templates as $template): ?><option value="<?php echo esc_attr($template['name']); ?>" <?php selected($last_template,$template['name']); ?>><?php echo esc_html($template['name']); ?></option><?php endforeach; ?>
                     </select>
-                    <p class="description">Choose a saved template to validate it directly, or leave this blank and upload a JSON file below.</p>
+                    <p class="description">Choose a saved template, or upload a JSON file below.</p>
                 </td></tr>
-                <tr><th>Elementor JSON Template</th><td><input type="file" name="validator_template" accept=".json"><p class="description">A saved template takes priority when selected.</p></td></tr>
-                <tr><th>DOCX Content (optional)</th><td><input type="file" name="validator_docx" accept=".docx"><p class="description">Upload the DOCX to validate H1/H2/H3 slots and repeatable marker compatibility as well.</p></td></tr>
+                <tr><th>Elementor JSON Template</th><td><input type="file" name="validator_template" id="wfebpg-validator-template-upload" accept=".json"><p class="description">The saved template is used when selected.</p></td></tr>
+                <tr><th>DOCX Content (optional)</th><td><input type="file" name="validator_docx" accept=".docx"><p class="description">Add a DOCX to check heading slots and repeat markers.</p></td></tr>
             </table>
-            <p><button class="button button-primary button-hero">Validate Template</button></p>
         </form>
+
+        <aside class="wfebpg-validator-preview wfebpg-template-preview-widget" data-template-select="#wfebpg-validator-saved-template" data-template-upload="#wfebpg-validator-template-upload" aria-labelledby="wfebpg-validator-preview-heading">
+            <h2 id="wfebpg-validator-preview-heading">Page Template Preview</h2>
+            <p class="description">Preview and validate the selected template. Add a DOCX to check content compatibility.</p>
+            <p><button type="button" class="button button-primary wfebpg-preview-button wfebpg-combined-preview-validate" disabled>Preview &amp; Validate Template</button></p>
+            <p class="description wfebpg-preview-status" role="status" aria-live="polite">Select or upload a template to preview it.</p>
+            <div class="wfebpg-template-preview-canvas wfebpg-preview-canvas" aria-label="Elementor template structure preview"></div>
+            <div class="wfebpg-validation-results" role="status" aria-live="polite"></div>
+        </aside>
 
         <div class="wfebpg-saved-template-manager">
             <h2>Saved Templates</h2>
-            <p class="description">Manage the JSON templates currently saved in the plugin library. Renaming updates the saved-template reference and image mappings; deleting removes only the saved template file.</p>
+            <p class="description">Rename or delete templates in the library. Renaming updates image mappings; deleting removes only the saved template.</p>
 
             <div class="wfebpg-template-library-upload">
                 <h3>Upload Template to Library</h3>
-                <p class="description">Upload an Elementor JSON template here to save it to the plugin's template library. This does <strong>not</strong> generate a page.</p>
+                <p class="description">Save an Elementor JSON template to the library. This does <strong>not</strong> generate a page.</p>
                 <div class="wfebpg-template-upload-control">
                     <input type="file" id="wfebpg-library-template-upload" accept=".json">
                     <button type="button" class="button button-secondary" id="wfebpg-upload-library-template">Upload &amp; Save Template</button>
@@ -279,11 +317,11 @@ function wfebpg_admin(){
         if (isset($result) && $result):
         ?>
             <div class="wfebpg-validator-grid">
-                <div class="wfebpg-validator-card"><h2>Content Markers</h2><p class="description">Counts are based on normalized <code>data-customID|type|flags</code> markers.</p><?php foreach ($result['counts'] as $key=>$count): ?><div class="wfebpg-check-row"><span><?php echo esc_html($key); ?></span><strong><?php echo absint($count); ?></strong></div><?php endforeach; ?></div>
+                <div class="wfebpg-validator-card"><h2>Content Markers</h2><p class="description">Counts include normalized <code>data-customID|type|flags</code> markers.</p><?php foreach ($result['counts'] as $key=>$count): ?><div class="wfebpg-check-row"><span><?php echo esc_html($key); ?></span><strong><?php echo absint($count); ?></strong></div><?php endforeach; ?></div>
                 <div class="wfebpg-validator-card"><h2>Repeatable Structure</h2><div class="wfebpg-check-row"><span>Repeatable sections</span><strong><?php echo absint($result['repeat_sections']); ?></strong></div><div class="wfebpg-check-row"><span>Repeatable card columns with images</span><strong><?php echo absint($result['repeat_columns']); ?></strong></div><div class="wfebpg-check-row"><span>Image/background locations</span><strong><?php echo absint($result['image_locations']); ?></strong></div><div class="wfebpg-check-row"><span>Images inside repeatable sections</span><strong><?php echo absint($result['repeat_image_locations']); ?></strong></div></div>
-                <?php if ($result['doc']): ?><div class="wfebpg-validator-card"><h2>DOCX Compatibility</h2><p class="description">The document is analyzed using normal Heading 1/2/3 styles and plain paragraphs.</p><?php foreach ($result['doc'] as $key=>$value): ?><div class="wfebpg-check-row"><span><?php echo esc_html(strtoupper($key)); ?></span><strong><?php echo absint($value); ?></strong></div><?php endforeach; ?></div><?php endif; ?>
+                <?php if ($result['doc']): ?><div class="wfebpg-validator-card"><h2>DOCX Compatibility</h2><p class="description">DOCX headings use Word's Heading 1/2/3 styles; body text uses normal paragraphs.</p><?php foreach ($result['doc'] as $key=>$value): ?><div class="wfebpg-check-row"><span><?php echo esc_html(strtoupper($key)); ?></span><strong><?php echo absint($value); ?></strong></div><?php endforeach; ?></div><?php endif; ?>
             </div>
-            <?php if (!empty($result['mapping_debug'])): ?><div class="wfebpg-validator-card wfebpg-mapping-debug" style="max-width:1200px;margin-top:20px"><h2>Mapping Debugger</h2><p class="description">This trace shows the exact hierarchical scope used for every marked Elementor heading/paragraph. A child heading is scoped to the preceding marked heading one level above it: H2→H1, H3→H2, H4→H3, and so on. Unmatched slots are left untouched by the generator.</p><div style="overflow:auto"><table class="widefat striped"><thead><tr><th>Type</th><th>Element ID</th><th>Widget</th><th>Marker</th><th>Parent Scope</th><th>DOCX Source</th><th>Status</th></tr></thead><tbody><?php foreach ($result['mapping_debug'] as $row): ?><tr><td><?php echo esc_html($row['level'] ?? $row['kind'] ?? ''); ?></td><td><code><?php echo esc_html($row['element_id'] ?? ''); ?></code></td><td><?php echo esc_html($row['widget'] ?? ''); ?></td><td><code><?php echo esc_html($row['marker'] ?? ''); ?></code></td><td><?php echo esc_html(($row['parent'] ?? '') . ' / ' . ($row['scope'] ?? '')); ?></td><td><?php echo esc_html($row['source'] ?? ''); ?></td><td><strong><?php echo esc_html($row['status'] ?? ''); ?></strong></td></tr><?php endforeach; ?></tbody></table></div></div><?php endif; ?>
+            <?php if (!empty($result['mapping_debug'])): ?><div class="wfebpg-validator-card wfebpg-mapping-debug" style="max-width:1200px;margin-top:20px"><h2>Mapping Debugger</h2><p class="description">See each marker's Elementor element, heading scope, DOCX source, and match status. Child headings use the preceding marked heading one level above (H2→H1, H3→H2, and so on). Unmatched elements stay unchanged.</p><div style="overflow:auto"><table class="widefat striped"><thead><tr><th>Type</th><th>Element ID</th><th>Widget</th><th>Marker</th><th>Parent Scope</th><th>DOCX Source</th><th>Status</th></tr></thead><tbody><?php foreach ($result['mapping_debug'] as $row): ?><tr><td><?php echo esc_html($row['level'] ?? $row['kind'] ?? ''); ?></td><td><code><?php echo esc_html($row['element_id'] ?? ''); ?></code></td><td><?php echo esc_html($row['widget'] ?? ''); ?></td><td><code><?php echo esc_html($row['marker'] ?? ''); ?></code></td><td><?php echo esc_html(($row['parent'] ?? '') . ' / ' . ($row['scope'] ?? '')); ?></td><td><?php echo esc_html($row['source'] ?? ''); ?></td><td><strong><?php echo esc_html($row['status'] ?? ''); ?></strong></td></tr><?php endforeach; ?></tbody></table></div></div><?php endif; ?>
             <?php if (!empty($result['errors'])): ?><div class="notice notice-error inline"><p><strong>Errors</strong></p><ul><?php foreach($result['errors'] as $msg): ?><li><?php echo esc_html($msg); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
             <?php if (!empty($result['warnings'])): ?><div class="notice notice-warning inline"><p><strong>Warnings</strong></p><ul><?php foreach($result['warnings'] as $msg): ?><li><?php echo esc_html($msg); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
             <?php if (empty($result['errors'])): ?><div class="notice notice-success inline"><p><strong>READY TO GENERATE</strong> — no blocking template errors were detected.</p></div><?php endif; ?>
@@ -305,13 +343,6 @@ function wfebpg_admin(){
 <?php
 }
 
-function wfebpg_template_validator(){
-    // Kept as a compatibility wrapper for older direct links/bookmarks. The validator
-    // now lives inside the main dashboard's Template Validator tab.
-    if(!current_user_can('manage_options')) return;
-    wfebpg_admin();
-}
-
 function wfebpg_template_library_dir(){
     $upload=wp_upload_dir();
     $dir=trailingslashit($upload['basedir']).'wfebpg-templates';
@@ -325,10 +356,144 @@ function wfebpg_classify_template_file($file){
     return 'automatic';
 }
 
-function wfebpg_classify_docx($file){
+function wfebpg_classify_docx($file,$zip_free_fallback=false){
     // Retained for the upload response API; generation is always automatic.
-    WFEBPG_DOCX_Reader::read($file);
+    WFEBPG_DOCX_Reader::read($file,$zip_free_fallback || !class_exists('ZipArchive'));
     return 'automatic';
+}
+
+function wfebpg_delete_user_template_preview($user_id){
+    $post_id=absint(get_user_meta($user_id,'wfebpg_template_preview_post_id',true));
+    if(!$post_id)return;
+    $post=get_post($post_id);
+    if($post && (int)$post->post_author===(int)$user_id
+        && (int)get_post_meta($post_id,'_wfebpg_template_preview_owner',true)===(int)$user_id){
+        wp_delete_post($post_id,true);
+    }
+    delete_user_meta($user_id,'wfebpg_template_preview_post_id');
+}
+
+function wfebpg_build_template_preview_nodes($elements,&$node_count=0,$depth=0){
+    if($depth>20)throw new Exception('The template is nested too deeply to preview.');
+    $nodes=[];
+    foreach((array)$elements as $element){
+        if(!is_array($element))continue;
+        $node_count++;
+        if($node_count>1000)throw new Exception('The template has too many elements to preview (maximum 1,000).');
+
+        $settings=isset($element['settings'])&&is_array($element['settings'])?$element['settings']:[];
+        $element_type=sanitize_key((string)($element['elType']??'element'));
+        $widget_type=sanitize_key((string)($element['widgetType']??''));
+        $type=$widget_type!==''?$widget_type:$element_type;
+        $label=ucwords(str_replace(['_','-'],' ',$type));
+        $text='';
+        foreach(['title','editor','text','description','button_text','testimonial_content','caption'] as $key){
+            if(!isset($settings[$key])||!is_scalar($settings[$key]))continue;
+            $candidate=trim(wp_strip_all_tags((string)$settings[$key]));
+            if($candidate!==''){$text=$candidate;break;}
+        }
+        if(strlen($text)>500)$text=substr($text,0,497).'...';
+
+        $image='';
+        if(isset($settings['image'])&&is_array($settings['image'])){
+            $image=esc_url_raw((string)($settings['image']['url']??''));
+        }
+        $marker=WFEBPG_Template::marker($element);
+        $nodes[]=[
+            'type'=>$type,
+            'label'=>$label,
+            'marker'=>$marker['raw']!==''?'data-customID|'.$marker['raw']:'',
+            'text'=>$text,
+            'image'=>$image,
+            'children'=>wfebpg_build_template_preview_nodes($element['elements']??[],$node_count,$depth+1),
+        ];
+    }
+    return $nodes;
+}
+
+function wfebpg_ajax_preview_template(){
+    if(!current_user_can('manage_options')||!check_ajax_referer('wfebpg_template_preview','nonce',false)){
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+
+    $user_id=get_current_user_id();
+    wfebpg_delete_user_template_preview($user_id);
+    $name=sanitize_file_name(wp_unslash($_POST['template']??''));
+    try{
+        if($name!==''){
+            $path=wfebpg_find_saved_template($name);
+            if(!$path)wp_send_json_error(['message'=>'The selected saved template no longer exists.'],404);
+            $json=file_get_contents($path);
+            if($json===false)throw new Exception('Unable to read the selected template.');
+            $json=wfebpg_apply_template_image_map($json,$name);
+        }else{
+            $json=wp_unslash($_POST['template_json']??'');
+            if(!is_string($json)||$json===''||strlen($json)>8388608){
+                wp_send_json_error(['message'=>'The uploaded template is empty or exceeds the 8 MB preview limit.'],400);
+            }
+            $name=sanitize_text_field(wp_unslash($_POST['template_name']??'Uploaded JSON template'));
+        }
+        $elements=WFEBPG_Template::decode($json);
+        $node_count=0;
+        $nodes=wfebpg_build_template_preview_nodes($elements,$node_count);
+    }catch(Throwable $e){
+        wp_send_json_error(['message'=>'Unable to prepare template preview: '.$e->getMessage()],400);
+    }
+
+    wp_send_json_success(['name'=>$name,'nodes'=>$nodes,'count'=>$node_count]);
+}
+
+function wfebpg_ajax_validate_template(){
+    if(!current_user_can('manage_options')||!check_ajax_referer('wfebpg_validate_template','nonce',false)){
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+
+    try{
+        $saved_name=sanitize_file_name(wp_unslash($_POST['validator_saved_template']??''));
+        if($saved_name!==''){
+            $path=wfebpg_find_saved_template($saved_name);
+            if(!$path)throw new Exception('The selected saved JSON template no longer exists.');
+            $json=file_get_contents($path);
+            if($json===false)throw new Exception('Unable to read the selected saved template.');
+        }elseif(!empty($_FILES['validator_template']['tmp_name'])){
+            $file=$_FILES['validator_template'];
+            if((int)($file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file($file['tmp_name'])){
+                throw new Exception('Unable to read the uploaded JSON template.');
+            }
+            if(strtolower(pathinfo((string)($file['name']??''),PATHINFO_EXTENSION))!=='json'){
+                throw new Exception('The template must be a .json file.');
+            }
+            $json=file_get_contents($file['tmp_name']);
+            if($json===false)throw new Exception('Unable to read the uploaded JSON template.');
+        }else{
+            throw new Exception('Select a saved Elementor template or upload a JSON template to validate.');
+        }
+
+        $doc=null;
+        if(!empty($_FILES['validator_docx']['tmp_name'])){
+            $doc_file=$_FILES['validator_docx'];
+            if((int)($doc_file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file($doc_file['tmp_name'])){
+                throw new Exception('Unable to read the uploaded DOCX file.');
+            }
+            $allow_fallback=!class_exists('ZipArchive')||(bool)get_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',true);
+            if(!class_exists('ZipArchive'))update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',1);
+            $doc=WFEBPG_DOCX_Reader::read($doc_file['tmp_name'],$allow_fallback);
+        }
+
+        $result=WFEBPG_Generator::validate_template_json($json,$doc);
+        wp_send_json_success(['result'=>$result]);
+    }catch(Throwable $e){
+        wp_send_json_error(['message'=>$e->getMessage()],400);
+    }
+}
+
+function wfebpg_ajax_save_zip_fallback(){
+    if(!current_user_can('manage_options')||!check_ajax_referer('wfebpg_save_zip_fallback','nonce',false)){
+        wp_send_json_error(['message'=>'Unauthorized.'],403);
+    }
+    $enabled=!class_exists('ZipArchive') || !empty($_POST['enabled']);
+    update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',$enabled?1:0);
+    wp_send_json_success(['enabled'=>$enabled,'ziparchive_available'=>class_exists('ZipArchive')]);
 }
 
 function wfebpg_get_saved_templates(){
@@ -417,7 +582,9 @@ function wfebpg_ajax_upload_docx(){
             if(!copy($file['tmp_name'],$dest)) throw new Exception('Unable to save the DOCX file.');
             @unlink($file['tmp_name']);
         }
-        $kind=wfebpg_classify_docx($dest);
+        $zip_free_fallback=!class_exists('ZipArchive') || !empty($_POST['zip_free_fallback']);
+        if(!class_exists('ZipArchive'))update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',1);
+        $kind=wfebpg_classify_docx($dest,$zip_free_fallback);
         $map_file=trailingslashit($dir).'.original-names.json';
         $map=[];
         if(is_file($map_file)){ $raw=file_get_contents($map_file); $decoded=json_decode((string)$raw,true); if(is_array($decoded))$map=$decoded; }
@@ -690,6 +857,8 @@ function wfebpg_handle_generate(){
     if(file_put_contents($template_copy,$mapped_template,LOCK_EX)===false)wp_die('Unable to copy the selected Elementor template for this job.');
 
     $parent=absint($_POST['parent']??0);$overwrite=!empty($_POST['overwrite']);$widgets_per_section=max(1,min(100,absint($_POST['widgets_per_section']??4)));$count=0;
+    $zip_free_fallback=!class_exists('ZipArchive') || !empty($_POST['zip_free_fallback']);
+    update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',$zip_free_fallback?1:0);
     $image_pool_enabled=!empty($_POST['image_pool_enabled']);
     update_user_meta(get_current_user_id(),'wfebpg_image_pool_enabled',$image_pool_enabled ? 1 : 0);
     $image_pool_ids=[];
@@ -730,7 +899,7 @@ function wfebpg_handle_generate(){
         $original_name=(string)($original_names[$name] ?? $original_names[$source] ?? $name);
         $dest=$base.'/'.sanitize_file_name($name);
         if($has_batch){if(!copy($source,$dest))continue;}else{if(!move_uploaded_file($source,$dest))continue;}
-        WFEBPG_Generator::enqueue(['docx'=>$dest,'page_title'=>$original_name,'template'=>$template_copy,'mode'=>'auto','parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'image_pool_ids'=>$image_pool_ids]);
+        WFEBPG_Generator::enqueue(['docx'=>$dest,'page_title'=>$original_name,'template'=>$template_copy,'mode'=>'auto','parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'image_pool_ids'=>$image_pool_ids,'zip_free_fallback'=>$zip_free_fallback]);
         $count++;
     }
     if($has_batch){foreach($sources as $source)@unlink($source);$batch_dir=wfebpg_docx_batch_dir($docx_batch);if($batch_dir){@unlink(trailingslashit($batch_dir).'.original-names.json');@rmdir($batch_dir);}}
@@ -769,4 +938,3 @@ function wfebpg_trash_generated(){
     }
     wp_safe_redirect(admin_url('admin.php?page=wfebpg&tab=new-pages'));exit;
 }
-function wfebpg_rollback(){wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;}

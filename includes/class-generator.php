@@ -8,7 +8,7 @@ class WFEBPG_Generator {
     const H_ID = 'h3';
     const P_ID = 'p';
     const REPEAT_ID = 'repeatable';
-    const INTERNAL_REPEAT_WIDGETS = ['toggle'];
+    const INTERNAL_REPEAT_WIDGETS = ['toggle', 'accordion'];
     const STEP_ID = 'step';
     const QUEUE_OPTION = 'wfebpg_queue';
     const QUEUE_LOCK_OPTION = 'wfebpg_queue_worker_lock';
@@ -176,14 +176,12 @@ class WFEBPG_Generator {
                 }
                 $template_ordinals[$level] = (int) ($template_ordinals[$level] ?? 0) + 1;
 
-                $block_index = null;
                 $block = self::next_structured_block_in_scope(
                     $blocks,
                     $heading_cursors,
                     $level,
                     $parent_path,
-                    $excluded_indices,
-                    $block_index
+                    $excluded_indices
                 );
 
                 if ($block !== null) {
@@ -294,7 +292,7 @@ class WFEBPG_Generator {
     }
 
     /** Find the next heading in the requested level/parent scope. */
-    private static function next_structured_block_in_scope(&$blocks, &$cursors, $level, $parent_path, $excluded_indices, &$found_index = null) {
+    private static function next_structured_block_in_scope(&$blocks, &$cursors, $level, $parent_path, $excluded_indices) {
         $key = (int) $level . '|' . (string) $parent_path;
         $cursor = (int) ($cursors[$key] ?? 0);
 
@@ -305,7 +303,6 @@ class WFEBPG_Generator {
             if (isset($excluded_indices[(int) ($block['source_index'] ?? -1)])) continue;
 
             $cursors[$key] = $i + 1;
-            $found_index = $i;
             return $block;
         }
 
@@ -316,7 +313,7 @@ class WFEBPG_Generator {
     private static function legacy_nonrepeat_blocks($doc) {
         $blocks = [];
         $current = null;
-        foreach (($doc['items'] ?? []) as $doc_index => $item) {
+        foreach (($doc['items'] ?? []) as $item) {
             if (!empty($item['repeatable'])) continue;
             if (!empty($item['heading'])) {
                 if ($current !== null) $blocks[] = $current;
@@ -504,6 +501,13 @@ class WFEBPG_Generator {
                     $target_level = 0;
                     if (preg_match('/^h([1-9][0-9]*)$/', $marker['type'], $rm)) {
                         $target_level = (int) $rm[1];
+                    } elseif ($marker['type'] === 'repeat') {
+                        // r2.2.0 structural repeat markers live on the
+                        // element that represents one complete visual item.
+                        // The marker itself intentionally does not specify
+                        // h3/h4/etc.; infer the DOCX record level from the
+                        // first heading marker inside that element.
+                        $target_level = self::repeatable_descendant_heading_level($node);
                     }
 
                     if ($target_level > 0) {
@@ -514,9 +518,18 @@ class WFEBPG_Generator {
                         }
 
                         $scope_key = $target_level . '|' . implode('|', $scope_parts);
-                        $owner_id = $is_root && WFEBPG_Template::is_repeatable($node)
-                            ? (string) ($node['id'] ?? '')
-                            : (string) $next_root_id;
+                        if ($marker['type'] === 'repeat') {
+                            // A structural repeat region can span multiple
+                            // Elementor Sections/Columns that form one visual
+                            // row set under the same DOCX heading scope. Use
+                            // the semantic scope as its stable collection key
+                            // instead of the individual Section ID.
+                            $owner_id = 'structural:' . $scope_key;
+                        } else {
+                            $owner_id = $is_root && WFEBPG_Template::is_repeatable($node)
+                                ? (string) ($node['id'] ?? '')
+                                : (string) $next_root_id;
+                        }
 
                         // Widget-level repeatables normally live inside an
                         // ordinary Section/Container. That parent is the
@@ -533,6 +546,7 @@ class WFEBPG_Generator {
                                 'scope_key' => $scope_key,
                                 'target_level' => $target_level,
                                 'parent_level' => $parent_level,
+                                'structural_repeat' => ($marker['type'] === 'repeat'),
                                 'items' => self::build_repeatable_items_for_template_scope(
                                     $doc,
                                     $target_level,
@@ -551,6 +565,28 @@ class WFEBPG_Generator {
 
         $walk($elements);
         return $collections;
+    }
+
+    /** Return the first explicit heading level inside a structural repeat element. */
+    private static function repeatable_descendant_heading_level($element) {
+        $found = 0;
+        $walk = function ($node) use (&$walk, &$found) {
+            if ($found || !is_array($node)) return;
+            $marker = WFEBPG_Template::marker($node);
+            if (preg_match('/^h([1-9][0-9]*)$/', $marker['type'], $m)) {
+                $found = (int) $m[1];
+                return;
+            }
+            foreach ((array) ($node['elements'] ?? []) as $child) {
+                $walk($child);
+                if ($found) return;
+            }
+        };
+        foreach ((array) ($element['elements'] ?? []) as $child) {
+            $walk($child);
+            if ($found) break;
+        }
+        return $found;
     }
 
     /** Build a DOCX collection from the template's current heading hierarchy. */
@@ -646,7 +682,8 @@ class WFEBPG_Generator {
     }
 
     private static function populate_internal_repeatable_widget(&$widget, $items) {
-        if (strtolower((string) ($widget['widgetType'] ?? '')) !== 'toggle') return;
+        $widget_type = strtolower((string) ($widget['widgetType'] ?? ''));
+        if (!in_array($widget_type, self::INTERNAL_REPEAT_WIDGETS, true)) return;
         $settings = isset($widget['settings']) && is_array($widget['settings']) ? $widget['settings'] : [];
         $tabs = [];
         foreach ((array) $items as $item) {
@@ -903,6 +940,15 @@ class WFEBPG_Generator {
             'paragraph_markers' => [],
         ];
 
+        // r2.2.0 structural repeat markers live on the whole visual item,
+        // while the child h3/p markers describe where that item's content goes.
+        // The parent itself is therefore the clone boundary; child markers do
+        // not need their own repeat flag.
+        if (WFEBPG_Template::custom_id($elements) === 'repeat') {
+            self::populate_structural_repeat_element($elements, $item);
+            return;
+        }
+
         if (WFEBPG_Template::is_repeatable($elements) && self::is_repeatable_root($elements)) {
             self::populate_repeatable_root($elements, $item);
         }
@@ -939,6 +985,36 @@ class WFEBPG_Generator {
             }
         };
         $populate($elements, self::is_repeatable_root($elements));
+    }
+
+    /** Populate a r2.2.0 structural repeat element using its child markers. */
+    private static function populate_structural_repeat_element(&$root, $item) {
+        $heading = (string) ($item['heading'] ?? '');
+        $content = implode("\n\n", (array) ($item['content'] ?? []));
+
+        $walk = function (&$node) use (&$walk, $heading, $content) {
+            if (!is_array($node)) return;
+            $marker = WFEBPG_Template::marker($node);
+            if (in_array($marker['type'], ['h1', 'h2', 'h3'], true)) {
+                $settings = isset($node['settings']) && is_array($node['settings']) ? $node['settings'] : [];
+                self::set_widget_marker_content($settings, $marker, $heading, $content);
+                $node['settings'] = $settings;
+            } elseif ($marker['type'] === 'p') {
+                $settings = isset($node['settings']) && is_array($node['settings']) ? $node['settings'] : [];
+                self::set_widget_text($settings, $content);
+                $node['settings'] = $settings;
+            }
+
+            if (isset($node['elements']) && is_array($node['elements'])) {
+                foreach ($node['elements'] as &$child) $walk($child);
+                unset($child);
+            }
+        };
+
+        if (isset($root['elements']) && is_array($root['elements'])) {
+            foreach ($root['elements'] as &$child) $walk($child);
+            unset($child);
+        }
     }
 
     /**
@@ -998,8 +1074,9 @@ class WFEBPG_Generator {
         if (is_array($doc)) self::populate_internal_repeaters($elements, $doc);
 
         $is_collection_map = self::is_repeatable_collection_map($repeatables);
+        $has_structural_repeat = $is_collection_map && self::has_structural_repeat_collection($repeatables);
 
-        if ($widgets_per_section > 0 && self::expand_repeatable_sections(
+        if (!$has_structural_repeat && $widgets_per_section > 0 && self::expand_repeatable_sections(
             $elements,
             $repeatables,
             $widgets_per_section,
@@ -1045,6 +1122,44 @@ class WFEBPG_Generator {
             return;
         }
 
+        // r2.2.0 structural repeats use the marked element itself as the
+        // repeat unit. Multiple Sections/Columns may form one region when they
+        // share the same DOCX heading scope. Resize that region first so the
+        // final Elementor tree contains exactly one item per DOCX record.
+        if ($has_structural_repeat) {
+            $structural_keys = [];
+            foreach ((array) $repeatables as $key => $collection) {
+                if (!empty($collection['structural_repeat'])) $structural_keys[] = $key;
+            }
+
+            foreach ($structural_keys as $collection_key) {
+                $items = (array) ($repeatables[$collection_key]['items'] ?? []);
+                $locations = [];
+                self::find_repeatable_locations($elements, $locations);
+                $groups = array_values(array_filter(
+                    self::group_repeatable_locations($locations),
+                    static function ($group) use ($collection_key) {
+                        return ($group['collection_key'] ?? null) === $collection_key;
+                    }
+                ));
+
+                if (!$groups) continue;
+
+                // Structural repeats now honor the same Widgets per section
+                // setting as the legacy repeat engine. The marker still defines
+                // the card itself, while this setting defines how many cards
+                // belong in each visual Elementor Section/row.
+                $limit = max(1, (int) $widgets_per_section);
+                self::rebuild_structural_repeat_rows(
+                    $elements,
+                    $groups,
+                    $items,
+                    $limit
+                );
+            }
+            return;
+        }
+
         // Modern element-level fallback. A repeatable group is associated with
         // the collection belonging to its containing section ID. This keeps a
         // process Image Box from consuming the Services collection, for example.
@@ -1065,6 +1180,13 @@ class WFEBPG_Generator {
             }
             $collection_cursors[$owner_id] = $cursor + 1;
         }
+    }
+
+    private static function has_structural_repeat_collection($value) {
+        foreach ((array) $value as $collection) {
+            if (!empty($collection['structural_repeat'])) return true;
+        }
+        return false;
     }
 
     private static function is_repeatable_collection_map($value) {
@@ -1278,7 +1400,7 @@ class WFEBPG_Generator {
         unset($card);
 
         // Remove unused visual columns. The CSS class below centers the
-        // remaining 25%-wide cards as one group inside the section container.
+        // remaining cards as one group inside the section container.
         $remaining = [];
         foreach ($section['elements'] as $index => $column) {
             if (isset($used_paths[$index])) $remaining[] = $column;
@@ -1654,6 +1776,7 @@ class WFEBPG_Generator {
                 $groups[$key] = [
                     'column_path' => $is_root ? null : ($location['column_path'] ?? null),
                     'is_root' => $is_root,
+                    'collection_key' => $location['collection_key'] ?? null,
                     'nodes' => [],
                 ];
             }
@@ -1733,19 +1856,42 @@ class WFEBPG_Generator {
         return false;
     }
 
-    private static function find_repeatable_locations(&$elements, &$locations, $parent_path = [], $column_path = null) {
+    private static function find_repeatable_locations(&$elements, &$locations, $parent_path = [], $column_path = null, &$heading_ordinals = []) {
         foreach ($elements as $index => &$el) {
             $current_column_path = $column_path;
             if (($el['elType'] ?? '') === 'column') {
                 $current_column_path = array_merge($parent_path, [$index]);
             }
 
+            $marker = WFEBPG_Template::marker($el);
+            if (preg_match('/^h([1-9][0-9]*)$/', $marker['type'], $hm)) {
+                $level = (int) $hm[1];
+                $heading_ordinals[$level] = (int) ($heading_ordinals[$level] ?? 0) + 1;
+                foreach (array_keys($heading_ordinals) as $known_level) {
+                    if ((int) $known_level > $level) $heading_ordinals[$known_level] = 0;
+                }
+            }
+
             if (WFEBPG_Template::is_repeatable($el) && !self::is_internal_repeatable_widget($el)) {
+                $collection_key = null;
+                if ($marker['type'] === 'repeat') {
+                    $target_level = self::repeatable_descendant_heading_level($el);
+                    if ($target_level > 0) {
+                        $parent_level = $target_level > 1 ? $target_level - 1 : 0;
+                        $scope_parts = [];
+                        for ($level = 1; $level <= $parent_level; $level++) {
+                            $scope_parts[] = 'h' . $level . ':' . (int) ($heading_ordinals[$level] ?? 0);
+                        }
+                        $collection_key = 'structural:' . $target_level . '|' . implode('|', $scope_parts);
+                    }
+                }
+
                 $locations[] = [
                     'node' => $el,
                     'node_path' => array_merge($parent_path, [$index]),
                     'parent_path' => $parent_path,
                     'column_path' => $current_column_path,
+                    'collection_key' => $collection_key,
                     'index' => $index,
                 ];
 
@@ -1762,11 +1908,209 @@ class WFEBPG_Generator {
                     $el['elements'],
                     $locations,
                     array_merge($parent_path, [$index]),
-                    $current_column_path
+                    $current_column_path,
+                    $heading_ordinals
                 );
             }
         }
         unset($el);
+    }
+
+    /** Return the path of the nearest ancestor Elementor Section for a node. */
+    private static function nearest_section_path(&$elements, $node_path) {
+        $path = array_values((array) $node_path);
+        if (count($path) < 2) return null;
+
+        $root =& $elements;
+        $section_path = null;
+        $current_path = [];
+
+        foreach ($path as $index) {
+            if (!isset($root[$index]) || !is_array($root[$index])) {
+                unset($root);
+                return null;
+            }
+
+            $current_path[] = $index;
+            $node = $root[$index];
+            if (($node['elType'] ?? '') === 'section') {
+                $section_path = $current_path;
+            }
+
+            if (!isset($node['elements']) || !is_array($node['elements'])) break;
+            $root =& $root[$index]['elements'];
+        }
+        unset($root);
+
+        return $section_path;
+    }
+
+    /**
+     * Rebuild a structural repeat collection into visual rows honoring the
+     * configured Widgets per section limit. This is the structural-repeat
+     * equivalent of expand_repeatable_sections(), while keeping the marked
+     * Column/Container as the repeat unit.
+     */
+    private static function rebuild_structural_repeat_rows(&$elements, $groups, $items, $limit) {
+        $items = array_values((array) $items);
+        if (!$groups) return;
+
+        // Determine the prototype Section and the repeatable groups that live
+        // directly under it. We use the first visual row as the reusable row
+        // prototype and preserve all non-repeatable content in that Section.
+        $first_node_path = (array) ($groups[0]['nodes'][0]['node_path'] ?? []);
+        $prototype_section_path = self::nearest_section_path($elements, $first_node_path);
+        if ($prototype_section_path === null) return;
+
+        $prototype_section = self::get_node_at_path($elements, $prototype_section_path);
+        if (!is_array($prototype_section)) return;
+
+        $section_prefix = $prototype_section_path;
+
+        // IMPORTANT: a structural repeat collection may span multiple
+        // original Elementor Sections. Every original repeat container is a
+        // prototype, not just the containers from the first Section.
+        //
+        // Previously this was filtered to $prototype_section_path only. That
+        // meant a template with 4 cards in row 1 and 3 cards in row 2 only
+        // remembered the first 4 prototypes. When DOCX records exceeded 4,
+        // cards 5-7 therefore cloned prototypes 1-4 again, causing their
+        // unique icons and card-specific visual structure to disappear.
+        //
+        // Keep each group's originating Section path so its parent path can
+        // be translated into the reusable row Section below.
+        $prototype_groups = [];
+        foreach ($groups as $group) {
+            $node_path = (array) ($group['nodes'][0]['node_path'] ?? []);
+            $source_section_path = self::nearest_section_path($elements, $node_path);
+            if ($source_section_path === null) continue;
+
+            $group['_source_section_path'] = $source_section_path;
+            $prototype_groups[] = $group;
+        }
+        if (!$prototype_groups) return;
+
+        // All original Sections containing this structural collection are
+        // replaced by the generated rows. This prevents clones from piling up
+        // inside one Section and restores the historical 4/4/4/... layout.
+        $section_paths = [];
+        foreach ($groups as $group) {
+            foreach ((array) ($group['nodes'] ?? []) as $node_info) {
+                $path = self::nearest_section_path($elements, $node_info['node_path'] ?? []);
+                if ($path !== null) $section_paths[serialize($path)] = $path;
+            }
+        }
+        $section_paths = array_values($section_paths);
+        if (!$section_paths) return;
+
+        $parent_path = array_slice($prototype_section_path, 0, -1);
+        $insert_index = (int) end($prototype_section_path);
+
+        // Only replace sibling Sections under the same parent. If a template
+        // uses an unusual nested arrangement, fail safely rather than deleting
+        // unrelated Elementor content.
+        foreach ($section_paths as $path) {
+            if (array_slice($path, 0, -1) !== $parent_path) return;
+        }
+
+        $prototype_groups = array_values($prototype_groups);
+        $replacement = [];
+        $item_count = count($items);
+        if ($item_count === 0) {
+            $replacement = [];
+        } else {
+            $row_count = (int) ceil($item_count / $limit);
+            for ($row = 0; $row < $row_count; $row++) {
+                $row_section = self::deep_clone_element($prototype_section);
+                self::remove_all_repeatables($row_section['elements']);
+
+                $chunk_count = min($limit, $item_count - ($row * $limit));
+                for ($j = 0; $j < $chunk_count; $j++) {
+                    $item_index = ($row * $limit) + $j;
+                    // Prototype selection must follow the global generated-item
+                    // index, not restart at prototype 1 for every visual row.
+                    // A template can contain multiple prototype rows (for example
+                    // 4 cards + 3 cards = 7 prototypes). When the DOCX produces
+                    // 7 records and Widgets per section is 4, the second row must
+                    // use prototypes 5, 6, and 7—not prototypes 1, 2, and 3.
+                    $source_group = $prototype_groups[$item_index % count($prototype_groups)];
+                    $source_section_path = (array) ($source_group['_source_section_path'] ?? $section_prefix);
+                    foreach ((array) ($source_group['nodes'] ?? []) as $node_info) {
+                        $node_path = (array) ($node_info['node_path'] ?? []);
+                        $parent_path_global = (array) ($node_info['parent_path'] ?? []);
+                        if (count($parent_path_global) < count($source_section_path)) continue;
+
+                        $relative_parent = array_slice(
+                            $parent_path_global,
+                            count($source_section_path)
+                        );
+                        $copy = self::deep_clone_element($node_info['node'] ?? []);
+                        self::populate_repeatable_card($copy, $items[$item_index]);
+                        self::append_to_path($row_section['elements'], $relative_parent, $copy);
+                    }
+                }
+
+                // Normalize the generated repeat columns on EVERY row.
+                // Each prototype may have a different original _column_size
+                // (for example, a 4-card row at 25% and a 3-card row at 33%).
+                // Those prototype layout values are visual-template artifacts,
+                // not the layout for the generated collection. Once records are
+                // chunked by Widgets per section, every generated repeat column
+                // in every row must use the configured capacity width.
+                if (isset($row_section['elements']) && is_array($row_section['elements'])) {
+                    $width = 100 / $limit;
+                    foreach ($row_section['elements'] as &$child) {
+                        if (($child['elType'] ?? '') !== 'column') continue;
+                        if (!WFEBPG_Template::is_repeatable($child)) continue;
+                        $child['settings'] = isset($child['settings']) && is_array($child['settings']) ? $child['settings'] : [];
+                        $child['settings']['_column_size'] = $width;
+                        $child['settings']['_inline_size'] = null;
+                    }
+                    unset($child);
+                }
+
+                // Preserve the existing partial-row centering behavior. The
+                // width normalization above is intentionally separate so full
+                // rows and partial rows both use the same generated card width.
+                if ($chunk_count < $limit) {
+                    $row_section['settings'] = isset($row_section['settings']) && is_array($row_section['settings'])
+                        ? $row_section['settings'] : [];
+                    $classes = preg_split('/\s+/', trim((string) ($row_section['settings']['css_classes'] ?? '')));
+                    $classes = array_values(array_filter($classes));
+                    if (!in_array('wfebpg-partial-centered', $classes, true)) $classes[] = 'wfebpg-partial-centered';
+                    $row_section['settings']['css_classes'] = implode(' ', $classes);
+                }
+
+                $replacement[] = $row_section;
+            }
+        }
+
+        // Remove the original structural Sections from the shared parent and
+        // insert the newly chunked rows at the first original Section position.
+        if ($parent_path) {
+            $parent =& self::get_node_reference($elements, $parent_path);
+            if ($parent === null || !isset($parent['elements']) || !is_array($parent['elements'])) {
+                unset($parent);
+                return;
+            }
+            $siblings =& $parent['elements'];
+        } else {
+            // Top-level Elementor Sections are siblings in the root content
+            // array, which has no parent node to resolve through a path.
+            $siblings =& $elements;
+        }
+
+        $remove_indexes = [];
+        foreach ($section_paths as $path) {
+            $remove_indexes[] = (int) end($path);
+        }
+        rsort($remove_indexes, SORT_NUMERIC);
+        foreach ($remove_indexes as $index) {
+            if (isset($siblings[$index])) array_splice($siblings, $index, 1);
+        }
+        array_splice($siblings, $insert_index, 0, $replacement);
+        unset($siblings);
+        if ($parent_path) unset($parent);
     }
 
     private static function append_to_path(&$root, $path, $copy) {
@@ -1926,14 +2270,12 @@ class WFEBPG_Generator {
                             'status' => count($candidates) ? 'REPEAT' : 'EMPTY',
                         ];
                     } else {
-                        $block_index = null;
                         $block = self::next_structured_block_in_scope(
                             $blocks,
                             $heading_cursors,
                             $level,
                             $parent_path,
-                            $excluded_indices,
-                            $block_index
+                            $excluded_indices
                         );
                         if ($block !== null) {
                             $active_doc_paths[$level] = (string) ($block['path'] ?? '');
@@ -2104,7 +2446,7 @@ class WFEBPG_Generator {
     }
 
     public static function generate($job) {
-        $doc = WFEBPG_DOCX_Reader::read($job['docx']);
+        $doc = WFEBPG_DOCX_Reader::read($job['docx'], !class_exists('ZipArchive') || !empty($job['zip_free_fallback']));
         $json = file_get_contents($job['template']);
         if ($json === false) throw new Exception('Unable to read Elementor JSON template.');
 

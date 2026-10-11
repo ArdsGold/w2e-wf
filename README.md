@@ -1,14 +1,14 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.1.0  
+**Version:** r2.2.0  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
 **Requires:** Elementor
 
-Wolf Forge Elementor Page Generator creates WordPress pages from DOCX content using an Elementor JSON template.
+Generate WordPress pages from DOCX content and an Elementor JSON template.
 
-The generator is **marker-driven**: the Elementor template decides exactly which widgets receive dynamic content. This keeps the visual design in Elementor while the DOCX controls page-specific copy.
+The template's `data-customID` markers control where DOCX content appears. Your Elementor design stays intact.
 
 > **Compatibility note:** The plugin's internal `WFEBPG_*` PHP classes, WordPress option names, AJAX actions, cron hook, and CSS selectors are intentionally retained from the previous codebase. They are implementation identifiers, not the public product name. Keeping them stable protects existing saved templates, queued jobs, logs, and user settings during the rebrand.
 
@@ -20,18 +20,18 @@ The generator is **marker-driven**: the Elementor template decides exactly which
 - Reads normal DOCX Heading 1/2/3 styles and paragraphs.
 - Maps content with `data-customID` markers.
 - Supports fixed and repeatable content blocks.
-- `|repeat` and the legacy `|repeatable` marker are equivalent; `|repeat` is preferred for new templates.
-- Repeatable regions are independently scoped to their surrounding heading hierarchy, so Services, Process, FAQs, and other H3/P groups do not share one global repeat cursor.
-- Supports the parent-container repeatable model.
-- Supports Elementor Toggle internal repeaters.
+- Supports the r2.2.0 structural `data-customID|repeat` marker for complete Elementor elements.
+- Structural repeat regions automatically shrink, expand, or disappear to match their scoped DOCX record count.
+- Existing `h3|repeat`, `h3|p|repeat`, and legacy `|repeatable` behavior remains supported.
+- Repeatable regions follow the document's heading hierarchy.
+- Supports repeatable parent containers and Elementor Toggle/Accordion items.
 - Remembers uploaded Elementor JSON templates.
 - Lets you map template images to Media Library images.
 - Supports an optional Media Library image pool for repeatable cards.
 - Processes large batches through a WP-Cron queue.
 - Regenerates Elementor CSS after page creation.
 - Provides a Template Validator and Mapping Debugger.
-- Tracks generated pages in an admin To-Do table.
-- Supports safe rollback/trash workflows already present in the plugin.
+- Tracks generated pages in the New Pages tab, with review and Trash actions.
 
 ---
 
@@ -61,7 +61,7 @@ Because the public plugin slug has been rebranded, treat this ZIP as a replaceme
 
 Create the visual page in Elementor.
 
-Only widgets with a `data-customID` marker are populated. Everything else remains under the designer's control.
+Only elements with a `data-customID` marker receive content. Other elements remain unchanged.
 
 ### 2. Add markers
 
@@ -82,13 +82,20 @@ Combined heading + paragraph marker:
 data-customID|h3|p
 ```
 
-Repeatable marker:
+Structural repeat marker for a complete Elementor item:
 
 ```text
-data-customID|h3|repeat
+data-customID|repeat
 ```
 
-See [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) for the complete mapping contract.
+Child content markers remain ordinary markers:
+
+```text
+data-customID|h3
+data-customID|p
+```
+
+Existing heading/widget repeat markers such as `data-customID|h3|repeat` and `data-customID|h3|p|repeat` remain supported. See [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) for the complete mapping contract.
 
 ### 3. Prepare the DOCX
 
@@ -116,11 +123,11 @@ Paragraph one.
 Paragraph two.
 ```
 
-The generator associates each heading with the paragraphs that follow it until the next relevant heading.
+Each heading is paired with its following paragraphs, up to the next relevant heading.
 
 ### 4. Validate
 
-Use **Template Validator** before generating a large batch.
+Use **Template Validator** before a large batch.
 
 It reports:
 
@@ -134,7 +141,7 @@ It reports:
 
 Upload the DOCX files, choose the Elementor template, configure the optional image pool and parent page, then queue the pages.
 
-The queue is processed by WP-Cron. **Process Queue Now** is available when you need to process a queued job manually.
+WP-Cron processes the queue. Choose **Process Queue Now** to run a job manually.
 
 ---
 
@@ -142,28 +149,26 @@ The queue is processed by WP-Cron. **Process Queue Now** is available when you n
 
 > **No `data-customID` = no content mapping.**
 
-This is the most important rule in the plugin.
+Unmarked content—including headings, buttons, icons, and images—is not changed by the content mapper.
 
-Unmarked headings, buttons, icons, images, decorative copy, and other Elementor content are not rewritten by the content mapper.
-
-An unmarked element can still be cloned when it sits inside a marked repeatable parent. Cloning is a layout operation; it does not mean the element's text is dynamically populated.
+An unmarked element inside a marked repeatable parent may be cloned, but its content is not populated.
 
 ---
 
 ## Repeatable parent containers
 
-The recommended modern pattern is:
+Recommended pattern:
 
 ```text
 Container
-  data-customID|h3|repeat
+  data-customID|repeat
 
   Heading widget
   Text Editor widget
   Button widget
 ```
 
-The container represents one complete repeatable item.
+The container is one repeatable item.
 
 For every matching DOCX H3 record, the generator:
 
@@ -174,7 +179,7 @@ For every matching DOCX H3 record, the generator:
 5. Inserts the paragraphs associated with that H3.
 6. Leaves unmarked child content alone.
 
-This works well for:
+Use this pattern for:
 
 - Services.
 - Benefits.
@@ -208,27 +213,25 @@ For a non-cloned container that should receive one DOCX heading and its associat
 data-customID|h3|p
 ```
 
-The generator uses the first Heading widget and first Text Editor widget inside the marked element.
+The generator fills the first Heading and Text Editor inside the marked element.
 
-This is useful for widgets such as Elementor Icon Box, where one widget contains both a title and description.
+Use this with widgets that have separate title and description fields, such as Icon Box.
 
 ---
 
-## Elementor Toggle
+## Elementor Toggle and Accordion
 
-Toggle widgets have their own internal repeated item collection.
+These widgets contain their own repeated items.
 
-Use:
+Add this marker to the widget:
 
 ```text
-data-customID|h3|repeat
+data-customID|h3|p|repeat
 ```
 
-on the Toggle widget itself.
+The generator replaces the widget's items with matching DOCX H3/paragraph records. It does not clone the widget.
 
-The generator rebuilds the Toggle's internal items from the matching DOCX H3/body records instead of cloning the entire Toggle widget.
-
-Existing visual settings, icons, typography, schema settings, and other widget settings are preserved.
+Existing visual, icon, typography, and schema settings are preserved.
 
 ---
 
@@ -236,7 +239,7 @@ Existing visual settings, icons, typography, schema settings, and other widget s
 
 ### Template Image Replacement
 
-The Template Image Replacement tool scans images already present in the saved Elementor JSON template.
+Template Image Replacement scans images in a saved Elementor JSON template.
 
 It can:
 
@@ -248,15 +251,15 @@ It can:
 
 ### Media Library Image Pool
 
-The optional Image Pool can assign selected Media Library images to repeatable card sections.
+The optional Image Pool assigns selected Media Library images to repeatable sections.
 
-Images are not duplicated within the same generated repeatable section, but they may be reused on another section or page.
+Images are not repeated within a section, but can be reused in other sections or pages.
 
 ---
 
 ## Queue processing
 
-Generation jobs are stored in a WordPress option and processed in small batches.
+Generation jobs are stored in a WordPress option and processed in small batches to limit request time.
 
 The worker uses:
 
@@ -266,15 +269,13 @@ The worker uses:
 - A near-immediate single cron event when a job is queued.
 - The recurring minute worker as a backup.
 
-This reduces the chance of a large batch monopolizing a single PHP request.
-
-If WP-Cron is unavailable, use **Process Queue Now** from the admin screen.
+If WP-Cron is unavailable, choose **Process Queue Now** in the admin screen.
 
 ---
 
 ## Generated page handling
 
-After generation, pages appear in **Newly Created Pages — To-Do**.
+Generated pages appear in **New Pages**.
 
 The table provides quick access to:
 
@@ -283,7 +284,7 @@ The table provides quick access to:
 - View.
 - Move to Trash where permitted.
 
-**Clear Generated Pages Table** only clears the plugin's tracking table. It does not delete WordPress pages.
+**Clear Generated Pages Table** clears tracking records only; it does not delete WordPress pages.
 
 ---
 
@@ -299,9 +300,15 @@ wolf-forge-elementor-page-generator/
 │   ├── admin.js
 │   └── frontend.css
 ├── docs/
+│   ├── ADMIN-DASHBOARD.md
 │   ├── ARCHITECTURE.md
+│   ├── CHANGELOG.md
+│   ├── CHANGELOG-LEGACY.md
+│   ├── CODE-AUDIT-r2.1.0.md
 │   ├── INSTALLATION.md
-│   └── MARKER-SYSTEM.md
+│   ├── MARKER-SYSTEM.md
+│   ├── RELEASE-r2.1.0.md
+│   └── RELEASE-r2.2.0.md
 ├── includes/
 │   ├── class-docx-reader.php
 │   ├── class-generator.php
@@ -341,11 +348,11 @@ The original implementation uses the `WFEBPG` prefix throughout PHP classes, Wor
 
 Changing those identifiers as part of a cosmetic rebrand would turn a safe rename into a data migration.
 
-For r2.0.1b, the public-facing brand is changed while the internal contract stays stable.
+The public-facing brand can change without renaming these internal identifiers.
 
-### Why the version is `r2.1.0`
+### Why the version is `r2.2.0`
 
-`r2.1.0` includes the admin dashboard workflow release together with the completed internal code cleanup and validator traversal optimization. The refactor does not change the underlying generation contract.
+`r2.2.0` adds structural repeat elements using `data-customID|repeat`. The marked Elementor element is the clone boundary, child content markers populate each clone, and the final number of structural repeat elements follows the matching DOCX record count.
 
 ---
 
@@ -371,61 +378,20 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
-- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.1.0 admin tabs, shared template state, and notification indicators.
-- [`docs/RELEASE-r2.1.0.md`](docs/RELEASE-r2.1.0.md) — r2.1.0 release scope and QA checklist.
-- [`docs/CODE-AUDIT-r2.1.0.md`](docs/CODE-AUDIT-r2.1.0.md) — unused-code audit and refactor notes.
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — current release history; older history remains in `docs/CHANGELOG-LEGACY.md`.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.0 admin tabs, shared template state, and notification indicators.
+- [`docs/RELEASE-r2.2.0.md`](docs/RELEASE-r2.2.0.md) — r2.2.0 release scope and QA checklist.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.0 changes.
+
+### Historical documentation
+
+These files document earlier releases and are separate from the current r2.2.0 documentation:
+
+- [`docs/RELEASE-r2.1.0.md`](docs/RELEASE-r2.1.0.md) — historical r2.1.0 release.
+- [`docs/CODE-AUDIT-r2.1.0.md`](docs/CODE-AUDIT-r2.1.0.md) — r2.1.0 maintenance audit.
+- [`docs/CHANGELOG-LEGACY.md`](docs/CHANGELOG-LEGACY.md) — archived pre-r2.2.0 release notes.
 
 ---
 
 ## Changelog
 
-### r2.1.0 — Admin dashboard and workflow release
-
-### Internal refactor and performance maintenance
-
-- Removed eight confirmed-dead private generator helpers.
-- Removed two confirmed-unused local variables.
-- Reduced duplicate marker parsing during validator tree traversal.
-- Preserved public helper methods for external compatibility.
-- Added the r2.1.0 code audit documentation.
-
-- Reorganized the admin dashboard into five client-side tabs:
-  - Page Generation
-  - Template Image Replacement
-  - New Pages
-  - Template Validator
-  - Logs
-- Added visual separation and improved contrast for the dashboard tabs.
-- Kept tab switching client-side so moving between sections does not reload the admin page.
-- Added shared Elementor JSON template selection across Page Generation, Template Image Replacement, and Template Validator.
-- Added Saved Template management to Template Validator, including upload-to-library, rename, delete, and clear actions. Uploading a template to the library does not generate a page.
-- Made saved-template and uploaded-template selection mutually exclusive in Page Generation.
-- Added inline template renaming without browser pop-ups.
-- Improved Saved Template rows so template names are more prominent and upload dates remain secondary.
-- Added expandable image previews/lightbox behavior to Template Image Replacement.
-- Added automatic Template Image Replacement tab warnings for unresolved template-image mappings without requiring a manual image scan.
-- Added automatic Template Validator status indicators: orange for warnings and red for validation errors. Status is evaluated from the selected persistent template without requiring the Validate Template button.
-- Added a light-green New Pages notification when a new page is generated; opening New Pages acknowledges the notification.
-- Added a red Logs notification for newly detected error-level log entries; opening Logs acknowledges the notification.
-- Added Logs filtering by level and message search.
-- Simplified the repeatable-marker validator warning so the fallback behavior is explained clearly.
-- Preserved the existing generator, repeat-marker, queue, image-pool, image-mapping, validator, and page-processing contracts.
-- Removed the temporary developer-only Logs error test control from the release build.
-- Added release documentation for the admin dashboard, tab notifications, shared template state, and upgrade/testing expectations.
-
-### r2.0.1b — Wolf Forge rebrand and maintainability release
-
-- Rebranded the public plugin name to **Wolf Forge Elementor Page Generator**.
-- Set authors to **Macky Villafuerte** and **Arden Guinto**.
-- Set release version to **r2.0.1b**.
-- Renamed the distributable plugin directory and main plugin file to the Wolf Forge brand.
-- Kept `WFEBPG_*` internal identifiers for upgrade compatibility.
-- Reworked the README into a structured developer/user guide.
-- Added architecture and installation documentation.
-- Improved readability in core bootstrap and logging code.
-- Preserved existing marker, queue, image replacement, image pool, validation, and page-generation behavior.
-
-### Previous release history
-
-The original codebase's historical changelog is preserved in `docs/CHANGELOG-LEGACY.md`.
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.0 release notes.

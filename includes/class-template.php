@@ -89,9 +89,12 @@ class WFEBPG_Template {
             if ($flag !== '') $flags[] = $flag;
         }
 
-        // Legacy repeatableItem and the shorter modern |repeat flag both
-        // normalize to the canonical repeatable behavior flag.
-        if ($type === 'repeatable' || in_array('repeat', $flags, true)) {
+        // Legacy repeatableItem, the shorter |repeat flag, and the r2.2.0
+        // structural marker data-customID|repeat all normalize to the same
+        // repeatable behavior flag. Keep the structural type as `repeat` so
+        // the generator can distinguish a whole-element repeat boundary from
+        // an h3|repeat content marker.
+        if ($type === 'repeatable' || $type === 'repeat' || in_array('repeat', $flags, true)) {
             $flags[] = 'repeatable';
             $flags = array_values(array_filter($flags, static function ($flag) {
                 return $flag !== 'repeat';
@@ -121,28 +124,6 @@ class WFEBPG_Template {
         return self::has_flag($el, 'repeatable');
     }
 
-    /**
-     * Return the ordinal of the nearest parent-heading marker before the first
-     * repeatable marker. For H3 repeatables this lets the generator bind the
-     * cards to the corresponding H2 section in the DOCX.
-     */
-    public static function repeatable_scope_parent_ordinal($elements, $parent_level) {
-        $ordinal = 0;
-        $result = 0;
-        self::walk($elements, function ($el) use (&$ordinal, &$result, $parent_level) {
-            if ($result) return;
-            $marker = self::marker($el);
-            if (self::has_flag($el, 'repeatable')) {
-                $result = max(1, $ordinal);
-                return;
-            }
-            if ($marker['type'] === 'h' . (int) $parent_level) {
-                $ordinal++;
-            }
-        });
-        return $result;
-    }
-
     /** Return all heading levels explicitly marked repeatable in a template. */
     public static function repeatable_heading_levels($elements) {
         $levels = [];
@@ -154,17 +135,6 @@ class WFEBPG_Template {
             }
         });
         return array_values(array_unique($levels));
-    }
-
-    /** Count normalized marker types in a template. */
-    public static function marker_counts($elements) {
-        $counts = [];
-        self::walk($elements, function ($el) use (&$counts) {
-            $type = self::custom_id($el);
-            if ($type === '') return;
-            $counts[$type] = ($counts[$type] ?? 0) + 1;
-        });
-        return $counts;
     }
 
     private static function raw_custom_id($el) {

@@ -2,18 +2,21 @@
 if (!defined('ABSPATH')) exit;
 
 class WFEBPG_DOCX_Reader {
-    public static function read($file) {
+    public static function read($file, $allow_zip_free_fallback = false) {
         if (!class_exists('ZipArchive')) {
-            throw new Exception('PHP ZipArchive extension is required.');
-        }
+            if (!$allow_zip_free_fallback) {
+                throw new Exception('PHP ZipArchive is unavailable. Enable the zip-free DOCX fallback in Page Generation to continue.');
+            }
+            $xml = self::read_document_xml_without_ziparchive($file);
+        } else {
+            $zip = new ZipArchive();
+            if ($zip->open($file) !== true) {
+                throw new Exception('Unable to open DOCX.');
+            }
 
-        $zip = new ZipArchive();
-        if ($zip->open($file) !== true) {
-            throw new Exception('Unable to open DOCX.');
+            $xml = $zip->getFromName('word/document.xml');
+            $zip->close();
         }
-
-        $xml = $zip->getFromName('word/document.xml');
-        $zip->close();
 
         if (!$xml) {
             throw new Exception('DOCX document.xml not found.');
@@ -153,6 +156,155 @@ class WFEBPG_DOCX_Reader {
             'repeatables' => $repeatables,
             'repeatable_count' => count($repeatables),
         ];
+    }
+
+    /**
+     * Read the DOCX document part from a ZIP file without the ZipArchive
+     * extension. DOCX uses ordinary ZIP central-directory entries; zlib is
+     * used only for the standard DEFLATE compression method.
+     */
+    private static function read_document_xml_without_ziparchive($file) {
+        if (!function_exists('gzinflate')) {
+            throw new Exception('The zip-free DOCX fallback requires PHP zlib.');
+        }
+        if (!is_file($file) || !is_readable($file)) {
+            throw new Exception('Unable to read DOCX file.');
+        }
+
+        $handle = fopen($file, 'rb');
+        if ($handle === false) {
+            throw new Exception('Unable to open DOCX.');
+        }
+
+        try {
+            $stat = fstat($handle);
+            $file_size = (int) ($stat['size'] ?? 0);
+            if ($file_size < 22) {
+                throw new Exception('DOCX file is too small to contain a valid ZIP directory.');
+            }
+
+            $tail_length = min($file_size, 65557);
+            if (fseek($handle, $file_size - $tail_length) !== 0) {
+                throw new Exception('Unable to seek within DOCX ZIP directory.');
+            }
+            $tail = fread($handle, $tail_length);
+            $eocd_position = strrpos($tail, "PK\x05\x06");
+            if ($eocd_position === false || strlen($tail) - $eocd_position < 22) {
+                throw new Exception('DOCX ZIP directory is missing its end record.');
+            }
+
+            $eocd = unpack(
+                'vdisk/vcentral_disk/ventries_on_disk/ventries_total/Vdirectory_size/Vdirectory_offset/vcomment_length',
+                substr($tail, $eocd_position + 4, 18)
+            );
+            if (!$eocd || $eocd['disk'] !== 0 || $eocd['central_disk'] !== 0
+                || $eocd['entries_on_disk'] !== $eocd['entries_total']
+                || $eocd['entries_total'] === 0xFFFF
+                || $eocd['directory_offset'] === 0xFFFFFFFF
+                || $eocd['directory_size'] === 0xFFFFFFFF) {
+                throw new Exception('This DOCX ZIP layout is not supported by the zip-free fallback.');
+            }
+
+            $directory_offset = (int) $eocd['directory_offset'];
+            $directory_end = $directory_offset + (int) $eocd['directory_size'];
+            if ($directory_offset < 0 || $directory_end > $file_size) {
+                throw new Exception('DOCX ZIP directory contains invalid offsets.');
+            }
+
+            $position = $directory_offset;
+            $document_entry = null;
+            for ($entry_index = 0; $entry_index < (int) $eocd['entries_total']; $entry_index++) {
+                if ($position + 46 > $directory_end || fseek($handle, $position) !== 0) {
+                    throw new Exception('DOCX ZIP directory is truncated.');
+                }
+                $header = fread($handle, 46);
+                if (strlen($header) !== 46 || substr($header, 0, 4) !== "PK\x01\x02") {
+                    throw new Exception('DOCX ZIP directory contains an invalid entry.');
+                }
+
+                $entry = unpack(
+                    'vversion_made/vversion_needed/vflags/vmethod/vmodified_time/vmodified_date/Vcrc/Vcompressed_size/Vuncompressed_size/vname_length/vextra_length/vcomment_length/vdisk/Vinternal_attributes/Vexternal_attributes/Vlocal_offset',
+                    substr($header, 4)
+                );
+                if (!$entry) {
+                    throw new Exception('Unable to read DOCX ZIP entry metadata.');
+                }
+
+                $record_length = 46 + $entry['name_length'] + $entry['extra_length'] + $entry['comment_length'];
+                if ($position + $record_length > $directory_end) {
+                    throw new Exception('DOCX ZIP directory entry exceeds its bounds.');
+                }
+                $name = fread($handle, $entry['name_length']);
+                if ($name === false || strlen($name) !== $entry['name_length']) {
+                    throw new Exception('Unable to read DOCX ZIP entry name.');
+                }
+
+                if ($name === 'word/document.xml') {
+                    $document_entry = $entry;
+                    break;
+                }
+                $position += $record_length;
+            }
+
+            if (!$document_entry) {
+                throw new Exception('DOCX document.xml not found.');
+            }
+            if (($document_entry['flags'] & 1) !== 0) {
+                throw new Exception('Encrypted DOCX files are not supported by the zip-free fallback.');
+            }
+            if ($document_entry['disk'] !== 0
+                || $document_entry['compressed_size'] === 0xFFFFFFFF
+                || $document_entry['uncompressed_size'] === 0xFFFFFFFF
+                || $document_entry['local_offset'] === 0xFFFFFFFF) {
+                throw new Exception('This DOCX ZIP entry layout is not supported by the zip-free fallback.');
+            }
+            if ($document_entry['uncompressed_size'] > 33554432) {
+                throw new Exception('DOCX document.xml exceeds the 32 MB zip-free fallback limit.');
+            }
+
+            $local_offset = (int) $document_entry['local_offset'];
+            if ($local_offset + 30 > $file_size || fseek($handle, $local_offset) !== 0) {
+                throw new Exception('DOCX ZIP entry has an invalid local-header offset.');
+            }
+            $local_header = fread($handle, 30);
+            if (strlen($local_header) !== 30 || substr($local_header, 0, 4) !== "PK\x03\x04") {
+                throw new Exception('DOCX ZIP entry has an invalid local header.');
+            }
+            $local = unpack(
+                'vversion/vflags/vmethod/vmodified_time/vmodified_date/Vcrc/Vcompressed_size/Vuncompressed_size/vname_length/vextra_length',
+                substr($local_header, 4)
+            );
+            if (!$local || $local['method'] !== $document_entry['method']
+                || ($local['flags'] & 1) !== 0) {
+                throw new Exception('DOCX ZIP local header does not match its directory entry.');
+            }
+
+            $data_offset = $local_offset + 30 + $local['name_length'] + $local['extra_length'];
+            $compressed_size = (int) $document_entry['compressed_size'];
+            if ($data_offset < 0 || $data_offset + $compressed_size > $file_size
+                || fseek($handle, $data_offset) !== 0) {
+                throw new Exception('DOCX ZIP entry data is outside the file bounds.');
+            }
+            $compressed = $compressed_size > 0 ? fread($handle, $compressed_size) : '';
+            if ($compressed === false || strlen($compressed) !== $compressed_size) {
+                throw new Exception('Unable to read DOCX document.xml ZIP data.');
+            }
+
+            if ($document_entry['method'] === 0) {
+                $xml = $compressed;
+            } elseif ($document_entry['method'] === 8) {
+                $xml = gzinflate($compressed, 33554432);
+            } else {
+                throw new Exception('DOCX uses an unsupported ZIP compression method.');
+            }
+            if ($xml === false || strlen($xml) !== (int) $document_entry['uncompressed_size']) {
+                throw new Exception('Unable to decompress DOCX document.xml.');
+            }
+
+            return $xml;
+        } finally {
+            fclose($handle);
+        }
     }
 
     private static function paragraph_text($xp, $paragraph) {

@@ -138,6 +138,266 @@ jQuery(function($){
     });
 })(jQuery);
 
+// Render a safe structural preview from saved or newly uploaded Elementor JSON.
+(function($){
+    function renderNode(node){
+        var $node=$('<div>',{'class':'wfebpg-preview-node wfebpg-preview-'+(node.type||'element')});
+        var $heading=$('<div>',{'class':'wfebpg-preview-node-heading'}).text(node.label||'Element');
+        if(node.marker){
+            $node.addClass('wfebpg-preview-marked')
+                .attr('title',node.marker)
+                .attr('data-customid',node.marker)
+                .attr('aria-label',(node.label||'Element')+' — '+node.marker);
+            $heading.append($('<span>',{'class':'wfebpg-preview-marker-badge'}).text(node.marker));
+        }
+        $node.append($heading);
+        if(node.image)$node.append($('<img>',{'class':'wfebpg-preview-image',src:node.image,alt:''}));
+        if(node.text)$node.append($('<div>',{'class':'wfebpg-preview-text'}).text(node.text));
+        if(node.children&&node.children.length){
+            var $children=$('<div>',{'class':'wfebpg-preview-children'});
+            $.each(node.children,function(_,child){$children.append(renderNode(child));});
+            $node.append($children);
+        }
+        return $node;
+    }
+
+    function initializePreview($panel){
+        var $select=$($panel.data('template-select'));
+        var $upload=$($panel.data('template-upload'));
+        var $button=$panel.find('.wfebpg-preview-button');
+        var $canvas=$panel.find('.wfebpg-preview-canvas');
+        var $status=$panel.find('.wfebpg-preview-status');
+        var autoPreview=String($panel.data('auto-preview'))==='1';
+        var requestId=0;
+        var autoPreviewTimer=null;
+        if(!$select.length||!$canvas.length)return;
+
+        function updateButtonState(){
+            if(!$button.length)return;
+            var hasUpload=!!($upload[0]&&$upload[0].files&&$upload[0].files.length);
+            var isValidating=$button.attr('data-validating')==='1';
+            $button.prop('disabled',isValidating||(!hasUpload&&!$select.val()));
+        }
+
+        function setAvailable(){
+            var file=$upload[0]&&$upload[0].files?$upload[0].files[0]:null;
+            var name=$select.val()||'';
+            updateButtonState();
+            if(name)$status.text('Ready to preview saved template: '+name);
+            else if(file)$status.text('Ready to preview uploaded template: '+file.name);
+            else{
+                $status.text('No template selected.');
+                $canvas.empty();
+            }
+        }
+
+        function showPreview(response){
+            if(!response||!response.nodes||!response.nodes.length){
+                $canvas.empty();
+                $status.text('This JSON contains no Elementor elements.');
+                return;
+            }
+            var $page=$('<div>',{'class':'wfebpg-preview-page'});
+            $.each(response.nodes,function(_,node){$page.append(renderNode(node));});
+            $canvas.empty().append($page);
+            $status.text('Preview: '+response.name+' ('+response.count+' elements). Hover over a marked element to see its marker.');
+        }
+
+        function sourceChanged(){
+            if(autoPreview){
+                if(autoPreviewTimer)window.clearTimeout(autoPreviewTimer);
+                autoPreviewTimer=window.setTimeout(runPreview,0);
+                return;
+            }
+            requestId++;
+            $canvas.empty();
+            setAvailable();
+        }
+        $select.on('change',sourceChanged);
+        $upload.on('change',sourceChanged);
+        $(document).on('wfebpg:template-changed',sourceChanged);
+        function runPreview(){
+            autoPreviewTimer=null;
+            var currentRequest=++requestId;
+            var name=$select.val()||'';
+            var file=!name&&$upload[0]&&$upload[0].files?$upload[0].files[0]:null;
+            if(!file&&!name){
+                $canvas.empty();
+                setAvailable();
+                return;
+            }
+            if($button.length)$button.prop('disabled',true);
+            $canvas.empty();
+            $status.text('Preparing template preview...');
+
+            function loadPreview(data){
+                $.post(WFEBPG_Admin.ajaxUrl,data)
+                    .done(function(response){
+                        if(currentRequest!==requestId)return;
+                        if(!response||!response.success||!response.data){
+                            $status.text(response&&response.data&&response.data.message?response.data.message:'Unable to prepare template preview.');
+                            return;
+                        }
+                        showPreview(response.data);
+                    })
+                    .fail(function(xhr){
+                        if(currentRequest!==requestId)return;
+                        $status.text(xhr.responseJSON&&xhr.responseJSON.data&&xhr.responseJSON.data.message?xhr.responseJSON.data.message:'Unable to prepare template preview.');
+                    })
+                    .always(function(){if(currentRequest===requestId)updateButtonState();});
+            }
+
+            var request={
+                action:'wfebpg_preview_template',
+                nonce:WFEBPG_Admin.templatePreviewNonce
+            };
+            if(file){
+                var reader=new FileReader();
+                reader.onload=function(event){
+                    if(currentRequest!==requestId)return;
+                    request.template_json=event.target.result||'';
+                    request.template_name=file.name;
+                    loadPreview(request);
+                };
+                reader.onerror=function(){
+                    if(currentRequest!==requestId)return;
+                    $status.text('Unable to read the selected JSON file.');
+                    updateButtonState();
+                };
+                reader.readAsText(file);
+            }else{
+                request.template=name;
+                loadPreview(request);
+            }
+        }
+        if($button.length)$button.on('click',runPreview);
+        $panel.on('wfebpg:preview-template',runPreview);
+        if(autoPreview)runPreview();
+        else setAvailable();
+    }
+
+    $('.wfebpg-template-preview-widget').each(function(){initializePreview($(this));});
+})(jQuery);
+
+// The validator's single action both previews and runs template/DOCX checks.
+(function($){
+    var $panel=$('.wfebpg-validator-preview');
+    var $form=$('.wfebpg-validator-form');
+    var $button=$panel.find('.wfebpg-combined-preview-validate');
+    var $results=$panel.find('.wfebpg-validation-results');
+    if(!$panel.length||!$form.length||!$button.length||!$results.length)return;
+    $form.find('#wfebpg-validator-saved-template, #wfebpg-validator-template-upload, input[name="validator_docx"]')
+        .on('change',function(){$results.empty();});
+
+    function addCheckRows($card,items){
+        $.each(items||{},function(key,value){
+            $card.append($('<div>',{'class':'wfebpg-check-row'})
+                .append($('<span>').text(String(key).toUpperCase()))
+                .append($('<strong>').text(String(value))));
+        });
+    }
+
+    function renderResult(result){
+        $results.empty();
+        if(!result){
+            $results.text('Validation returned no result.');
+            return;
+        }
+        var $grid=$('<div>',{'class':'wfebpg-validator-grid'});
+        var $markers=$('<div>',{'class':'wfebpg-validator-card'}).append($('<h3>').text('Content Markers'));
+        addCheckRows($markers,result.counts);
+        var $structure=$('<div>',{'class':'wfebpg-validator-card'}).append($('<h3>').text('Repeatable Structure'));
+        addCheckRows($structure,{
+            repeatable_sections:result.repeat_sections,
+            repeatable_card_columns_with_images:result.repeat_columns,
+            image_background_locations:result.image_locations,
+            images_inside_repeatable_sections:result.repeat_image_locations
+        });
+        $grid.append($markers,$structure);
+        if(result.doc){
+            var $doc=$('<div>',{'class':'wfebpg-validator-card'}).append($('<h3>').text('DOCX Compatibility'));
+            addCheckRows($doc,result.doc);
+            $grid.append($doc);
+        }
+        $results.append($grid);
+
+        if(result.errors&&result.errors.length){
+            var $error=$('<div>',{'class':'notice notice-error inline'}).append($('<p>').append($('<strong>').text('Errors')));
+            var $errorList=$('<ul>');
+            $.each(result.errors,function(_,message){$errorList.append($('<li>').text(message));});
+            $results.append($error.append($errorList));
+        }
+        if(result.warnings&&result.warnings.length){
+            var $warning=$('<div>',{'class':'notice notice-warning inline'}).append($('<p>').append($('<strong>').text('Warnings')));
+            var $warningList=$('<ul>');
+            $.each(result.warnings,function(_,message){$warningList.append($('<li>').text(message));});
+            $results.append($warning.append($warningList));
+        }
+        if(!result.errors||!result.errors.length){
+            $results.append($('<div>',{'class':'notice notice-success inline'}).append(
+                $('<p>').append($('<strong>').text('READY TO GENERATE'),document.createTextNode(' — no blocking template errors were detected.'))
+            ));
+        }
+        if(result.mapping_debug&&result.mapping_debug.length){
+            var $debug=$('<div>',{'class':'wfebpg-validator-card wfebpg-mapping-debug'}).css({maxWidth:'1200px',marginTop:'20px'});
+            $debug.append($('<h3>').text('Mapping Debugger'));
+            $debug.append($('<p>',{'class':'description'}).text('See each marker’s scope and matching DOCX source.'));
+            var $table=$('<table>',{'class':'widefat striped'}).append(
+                $('<thead>').append($('<tr>').append(
+                    $('<th>').text('Type'),$('<th>').text('Element ID'),$('<th>').text('Widget'),
+                    $('<th>').text('Marker'),$('<th>').text('Parent Scope'),$('<th>').text('DOCX Source'),$('<th>').text('Status')
+                ))
+            );
+            var $body=$('<tbody>');
+            $.each(result.mapping_debug,function(_,row){
+                $body.append($('<tr>').append(
+                    $('<td>').text(row.level||row.kind||''),
+                    $('<td>').append($('<code>').text(row.element_id||'')),
+                    $('<td>').text(row.widget||''),
+                    $('<td>').append($('<code>').text(row.marker||'')),
+                    $('<td>').text((row.parent||'')+' / '+(row.scope||'')),
+                    $('<td>').text(row.source||''),
+                    $('<td>').append($('<strong>').text(row.status||''))
+                ));
+            });
+            $table.append($body);
+            $debug.append($('<div>').css({overflow:'auto'}).append($table));
+            $results.append($debug);
+        }
+    }
+
+    $button.on('click',function(){
+        $panel.trigger('wfebpg:preview-template');
+        $button.attr('data-validating','1');
+        $button.prop('disabled',true);
+        $results.text('Validating selected template...');
+
+        var formData=new FormData($form[0]);
+        formData.append('action','wfebpg_validate_template');
+        formData.append('nonce',(window.WFEBPG_Admin&&WFEBPG_Admin.validatorNonce)||'');
+        $.ajax({
+            url:(window.WFEBPG_Admin&&WFEBPG_Admin.ajaxUrl)||window.ajaxurl,
+            type:'POST',
+            data:formData,
+            processData:false,
+            contentType:false,
+            dataType:'json'
+        }).done(function(response){
+            if(!response||!response.success||!response.data||!response.data.result){
+                $results.text(response&&response.data&&response.data.message?response.data.message:'Unable to validate the selected template.');
+                return;
+            }
+            renderResult(response.data.result);
+        }).fail(function(xhr){
+            $results.text(xhr.responseJSON&&xhr.responseJSON.data&&xhr.responseJSON.data.message?xhr.responseJSON.data.message:'Unable to validate the selected template.');
+        }).always(function(){
+            $button.removeAttr('data-validating');
+            var hasUpload=!!$form.find('#wfebpg-validator-template-upload')[0].files.length;
+            $button.prop('disabled',!$form.find('#wfebpg-validator-saved-template').val()&&!hasUpload);
+        });
+    });
+})(jQuery);
+
 // Template Validator tab status. The selected saved template is checked in the background
 // so warnings/errors are visible without requiring the user to click Validate Template.
 (function($){
@@ -204,17 +464,17 @@ jQuery(function($){
             $select.prop('disabled', true);
             $json.prop('disabled', false);
             $clearJson.show();
-            $sourceStatus.text('A new JSON template is selected for upload. The saved-template dropdown is disabled until you clear the uploaded template.');
+            $sourceStatus.text('New template selected. Clear the upload to choose a saved template.');
         } else if (hasSaved) {
             $select.prop('disabled', false);
             $json.prop('disabled', true);
             $clearJson.hide();
-            $sourceStatus.text('A saved JSON template is selected. Uploading a new template is disabled until you choose “Upload a new template instead”.');
+            $sourceStatus.text('Saved template selected. Choose "Upload a new template instead" to switch.');
         } else {
             $select.prop('disabled', false);
             $json.prop('disabled', false);
             $clearJson.hide();
-            $sourceStatus.text('Choose either a saved Elementor template or upload a new JSON template. Only one template source can be active at a time.');
+            $sourceStatus.text('Select a saved template or upload a JSON file.');
         }
     }
     window.WFEBPG_SyncTemplateSourceUI=syncTemplateSourceUI;
@@ -242,6 +502,7 @@ jQuery(function($){
             data.append('action','wfebpg_upload_docx');
             data.append('nonce',(window.WFEBPG_Admin&&WFEBPG_Admin.docxNonce)||'');
             data.append('batch',currentBatch||'');
+            data.append('zip_free_fallback',$('#wfebpg-zip-free-fallback').prop('checked')?'1':'');
             data.append('docx',file);
             activeRequest=$.ajax({url:(window.WFEBPG_Admin&&WFEBPG_Admin.ajaxUrl)||window.ajaxurl,type:'POST',data:data,processData:false,contentType:false,dataType:'json'})
             .done(function(response){
@@ -298,6 +559,17 @@ jQuery(function($){
     });
 
     syncTemplateSourceUI();
+
+    $('#wfebpg-zip-free-fallback').on('change',function(){
+        if(!(window.WFEBPG_Admin&&WFEBPG_Admin.ajaxUrl&&WFEBPG_Admin.zipFallbackNonce))return;
+        $.post(WFEBPG_Admin.ajaxUrl,{
+            action:'wfebpg_save_zip_fallback',
+            nonce:WFEBPG_Admin.zipFallbackNonce,
+            enabled:this.checked?'1':''
+        }).fail(function(){
+            window.alert('Unable to save the zip-free DOCX fallback preference.');
+        });
+    });
 
     $form.on('submit',function(e){
         var form=this;
@@ -420,7 +692,7 @@ jQuery(function($){
     }
     $load.on('click',function(){
         var name=$template.val(); if(!name){$status.text('Select a saved template first.');$list.empty();return;}
-        $load.prop('disabled',true).text('Scanning...'); $status.text('Scanning template images and comparing Media Library filenames...');
+        $load.prop('disabled',true).text('Scanning...'); $status.text('Scanning template images and comparing filenames...');
         $.post(WFEBPG_Admin.ajaxUrl,{action:'wfebpg_get_template_images',nonce:WFEBPG_Admin.templateImageNonce,template:name})
         .done(function(r){ if(!r.success){$status.text(r.data&&r.data.message?r.data.message:'Unable to scan template.');return;} state.images=r.data.images||[];state.map={};state.images.forEach(function(img){if(img.mapped)state.map[img.key]=img.mapped.id;});$status.text(state.images.length+' template image(s) found. Review the suggestions below.');render();if(window.WFEBPG_UpdateTemplateImageStatus){var st=r.data.status||{};window.WFEBPG_UpdateTemplateImageStatus(name,parseInt(st.unresolved_images!==undefined?st.unresolved_images:st.unresolved_external,10)||0,parseInt(st.total_images!==undefined?st.total_images:st.total_external,10)||0);} })
         .fail(function(){ $status.text('Unable to scan template.'); })
@@ -432,7 +704,7 @@ jQuery(function($){
         frame.on('select',function(){ var a=frame.state().get('selection').first().toJSON(); state.map[key]=parseInt(a.id,10); var img=state.images.find(function(x){return x.key===key;}); if(img)img.mapped={id:a.id,title:a.title,filename:a.filename||a.filename,url:a.url||a.sizes&&a.sizes.medium&&a.sizes.medium.url}; render(); saveMap(); }); frame.open();
     });
     $list.on('click','.wfebpg-clear-template-image',function(){ var key=$(this).data('key'); delete state.map[key]; var img=state.images.find(function(x){return x.key===key;}); if(img)img.mapped=false; render(); saveMap(); });
-    $template.on('change',function(){$list.empty();$status.text('Select Scan Template Images to load the current mappings and suggestions.');if(window.WFEBPG_UpdateTemplateImageStatus)window.WFEBPG_UpdateTemplateImageStatus($(this).val()||'');});
+    $template.on('change',function(){$list.empty();$status.text('Choose Scan Template Images to load mappings and suggestions.');if(window.WFEBPG_UpdateTemplateImageStatus)window.WFEBPG_UpdateTemplateImageStatus($(this).val()||'');});
 })(jQuery);
 
 // New Pages tab notification. It polls the existing generated-page list so a page

@@ -1,4 +1,74 @@
+// Save only changed preferences so another administrator's unrelated edits survive.
+(function($){
+    var $root = $('.wfebpg-admin');
+    if (!$root.length || !window.WFEBPG_Admin || !WFEBPG_Admin.settingsNonce) return;
+    var pending = {}, inFlight = {}, saving = false;
+    var $status = $('#wfebpg-settings-status');
+    function flush(){
+        if (saving || !Object.keys(pending).length) return;
+        var changes = pending;
+        inFlight = changes;
+        pending = {};
+        saving = true;
+        $status.text('Saving settings...');
+        $.post(WFEBPG_Admin.ajaxUrl, {
+            action:'wfebpg_save_settings', nonce:WFEBPG_Admin.settingsNonce, settings:changes
+        }).done(function(response){
+            if (!response || !response.success) {
+                pending = $.extend({}, changes, pending);
+                $status.text('Settings could not be saved. Change a setting to retry.');
+                return;
+            }
+            $status.text('Settings saved.');
+        }).fail(function(){
+            pending = $.extend({}, changes, pending);
+            $status.text('Settings could not be saved. Change a setting to retry.');
+        }).always(function(){
+            saving = false;
+            inFlight = {};
+            if ($status.text() === 'Settings saved.') flush();
+        });
+    }
+    window.WFEBPG_SaveSettings = function(changes){
+        $.extend(pending, changes);
+        flush();
+    };
+    var fields = {
+        'widgets_per_section':'#wfebpg-widgets-per-section',
+        'widgets_no_limit':'#wfebpg-widgets-no-limit',
+        'parent':'select[name="parent"]',
+        'overwrite':'input[name="overwrite"]',
+        'image_pool_enabled':'#wfebpg-image-pool-enabled',
+        'log_level':'#wfebpg-log-level',
+        'log_search':'#wfebpg-log-search'
+    };
+    $.each(fields, function(key, selector){
+        $root.on('change', selector, function(){
+            var changes = {};
+            changes[key] = this.type === 'checkbox' ? (this.checked ? 1 : 0) : $(this).val();
+            window.WFEBPG_SaveSettings(changes);
+        });
+    });
+    $root.on('input', '#wfebpg-widgets-per-section, #wfebpg-log-search', function(){
+        $(this).trigger('change');
+    });
+    window.addEventListener('pagehide', function(){
+        var unsaved = $.extend({}, inFlight, pending);
+        if (!Object.keys(unsaved).length || !navigator.sendBeacon) return;
+        navigator.sendBeacon(WFEBPG_Admin.ajaxUrl, new Blob([$.param({
+            action:'wfebpg_save_settings', nonce:WFEBPG_Admin.settingsNonce, settings:unsaved
+        })], {type:'application/x-www-form-urlencoded;charset=UTF-8'}));
+    });
+})(jQuery);
+
 jQuery(function($){
+    var $widgetsNoLimit = $('#wfebpg-widgets-no-limit');
+    function updateWidgetsLimit(){
+        $('#wfebpg-widgets-per-section').prop('disabled', $widgetsNoLimit.prop('checked'));
+    }
+    $widgetsNoLimit.on('change', updateWidgetsLimit);
+    updateWidgetsLimit();
+
     var $enabled = $('#wfebpg-image-pool-enabled');
     var $panel = $('#wfebpg-image-pool-panel');
     var $ids = $('#wfebpg-image-pool-ids');
@@ -36,6 +106,7 @@ jQuery(function($){
         $.post(WFEBPG_Admin.ajaxUrl, {
             action: 'wfebpg_save_image_pool',
             nonce: WFEBPG_Admin.imagePoolNonce,
+            image_pool_enabled: $enabled.prop('checked') ? '1' : '',
             image_pool_ids: ids.join(',')
         });
     }
@@ -66,7 +137,7 @@ jQuery(function($){
     });
 
     var savedIds = getIds();
-    $enabled.prop('checked', savedIds.length > 0).trigger('change');
+    $panel.toggle($enabled.prop('checked'));
     renderSelection({});
     loadSavedAttachments(savedIds);
 
@@ -789,15 +860,14 @@ jQuery(function($){
         $root.find('.wfebpg-tab-panel').removeClass('is-active');
         $root.find('.wfebpg-tab-panel[data-tab-panel="'+tab+'"]').addClass('is-active');
         if(persist){
-            try{window.sessionStorage.setItem('wfebpg-active-tab',tab);}catch(e){}
+            if(window.WFEBPG_SaveSettings) window.WFEBPG_SaveSettings({active_tab:tab});
+            var url = new URL(window.location.href);
+            url.searchParams.set('tab', tab);
+            window.history.replaceState(null, '', url);
         }
     }
 
     var initial=$root.attr('data-server-tab')||$root.find('.wfebpg-tab-button.nav-tab-active').data('tab')||'generation';
-    if(initial==='generation')try{
-        var remembered=sessionStorage.getItem('wfebpg-active-tab');
-        if(remembered && $root.find('.wfebpg-tab-button[data-tab="'+remembered+'"]').length) initial=remembered;
-    }catch(e){}
     activateTab(initial,false);
 
     $root.on('click','.wfebpg-tab-button',function(e){

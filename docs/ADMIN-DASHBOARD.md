@@ -1,4 +1,4 @@
-# Admin Dashboard Guide — r2.2.0
+# Admin Dashboard Guide — r2.2.2
 
 The dashboard has five tabs. Switch tabs without reloading the page.
 
@@ -8,9 +8,25 @@ Upload DOCX files and select or upload an Elementor JSON template. Pages are que
 
 The right-side preview updates automatically when the template changes. It shows the Elementor structure, not a rendered screenshot. Hover over a marked element to view its `data-customID` marker. With no template selected, the preview is empty.
 
+Paragraph markers can populate Heading widgets as well as Text Editors. A section's sole marked H1/H2 is used as its scope even when the FAQ widget comes before that heading in the exported JSON. The visual layout stays in its original order. Regenerate existing pages to apply mapping fixes.
+
 Choose either a saved template or a new upload. To use an uploaded file as a saved template, add it to the library in Template Validator.
 
-The DOCX Compatibility box reports whether the site's PHP has `ZipArchive`. If it does not, the plugin enables the zip-free fallback for your account. The fallback requires PHP zlib.
+The DOCX Compatibility box reports whether the site's PHP has `ZipArchive`. If it does not, the plugin enables the zip-free fallback for all administrators. The fallback requires PHP zlib.
+
+## Automatic shared settings
+
+Changes save automatically without submitting a form. Settings are shared across administrators on this site and restored when reopening or refreshing the dashboard. Wait for **Settings saved** after changing dashboard controls. A save failure is shown inline; changing a setting retries unsaved preferences.
+
+Remembered settings include Widgets per section, No limit, Parent Page, Overwrite matching existing pages, Media Library Image Pool enablement and selected images, zip-free fallback, selected saved template, saved image mappings, active tab, log level, and log search. Clearing an image selection or unchecking a checkbox saves that empty/off state. A disabled image pool retains its selection for later use and does not attach those images to new jobs.
+
+The first administrator to load an existing preference seeds its shared value from their previous saved setting. Other administrators subsequently read the shared value. An already-open dashboard loads another administrator's updates on refresh. Notifications and temporary preview ownership remain personal. Browser file inputs must be selected again after refresh; queue and delete actions are never repeated automatically.
+
+## Repeatable Section
+
+**No limit** appears beside **Widgets per section**. Check it to disable and gray out the number input while keeping every widget in each repeatable group in one generated section. Separate groups keep their own sections. Uncheck it to restore the previous number. The number and checkbox both persist, including across refreshes while No limit is checked.
+
+Unlimited mode applies to structural and legacy/widget repeat groups and supports more than 100 items. With No limit off, the numeric 1–100 capacity still controls generated rows. Existing template layout rules determine how widgets render inside the section.
 
 ## Template Image Replacement
 

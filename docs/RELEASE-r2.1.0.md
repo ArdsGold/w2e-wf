@@ -1,6 +1,6 @@
 # Historical Release: Wolf Forge Elementor Page Generator r2.1.0
 
-> This document records the r2.1.0 release. It is historical; the current plugin release is r2.2.0.
+> This document records the historical r2.1.0 release. See [CHANGELOG.md](CHANGELOG.md) for the current release.
 
 ## Release summary
 

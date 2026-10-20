@@ -16,10 +16,10 @@ add_action('admin_enqueue_scripts', function($hook){
     wp_enqueue_script('jquery');
     wp_enqueue_script('wfebpg-admin', WFEBPG_URL.'assets/admin.js', ['jquery'], WFEBPG_VERSION, true);
 
-    // This callback has its own scope, so load the current user's saved image pool here.
+    // Load the shared image pool in this callback's scope.
     $saved_image_ids = array_values(array_unique(array_filter(array_map(
         'absint',
-        (array) get_user_meta(get_current_user_id(), 'wfebpg_image_pool_ids', true)
+        (array) wfebpg_get_setting('wfebpg_image_pool_ids')
     ))));
 
     wp_localize_script('wfebpg-admin', 'WFEBPG_Admin', [
@@ -30,13 +30,14 @@ add_action('admin_enqueue_scripts', function($hook){
         'templateImageNonce' => wp_create_nonce('wfebpg_template_images'),
         'templateManagementNonce' => wp_create_nonce('wfebpg_template_management'),
         'savedImageIds' => $saved_image_ids,
-        'lastTemplate' => sanitize_file_name((string) get_user_meta(get_current_user_id(), 'wfebpg_last_template', true)),
+        'lastTemplate' => sanitize_file_name((string) wfebpg_get_setting('wfebpg_last_template')),
         'newPagesNonce' => wp_create_nonce('wfebpg_new_pages_status'),
         'logsErrorNonce' => wp_create_nonce('wfebpg_logs_error_status'),
         'validatorStatusNonce' => wp_create_nonce('wfebpg_validator_status'),
         'zipFallbackNonce' => wp_create_nonce('wfebpg_save_zip_fallback'),
         'templatePreviewNonce' => wp_create_nonce('wfebpg_template_preview'),
         'validatorNonce' => wp_create_nonce('wfebpg_validate_template'),
+        'settingsNonce' => wp_create_nonce('wfebpg_save_settings'),
     ]);
     wp_enqueue_style('wfebpg-admin', WFEBPG_URL.'assets/admin.css', [], WFEBPG_VERSION);
 });
@@ -69,7 +70,7 @@ function wfebpg_admin(){
     if(!current_user_can('manage_options'))return;
     $ziparchive_available=class_exists('ZipArchive');
     if(!$ziparchive_available){
-        update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',1);
+        update_option('wfebpg_zip_free_fallback',1);
     }
     $result = null;
     $error = '';
@@ -92,7 +93,7 @@ function wfebpg_admin(){
             if (!empty($_FILES['validator_docx']['tmp_name'])) {
                 $doc = WFEBPG_DOCX_Reader::read(
                     $_FILES['validator_docx']['tmp_name'],
-                    !$ziparchive_available || (bool)get_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',true)
+                    !$ziparchive_available || (bool)wfebpg_get_setting('wfebpg_zip_free_fallback')
                 );
             }
             $result = WFEBPG_Generator::validate_template_json($json, $doc);
@@ -105,12 +106,12 @@ function wfebpg_admin(){
     $q=get_option('wfebpg_queue',[]);
     $created_pages=get_option('wfebpg_created_pages',[]);
     $saved_templates=wfebpg_get_saved_templates();
-    $last_template=sanitize_file_name((string)get_user_meta(get_current_user_id(),'wfebpg_last_template',true));
+    $last_template=sanitize_file_name((string)wfebpg_get_setting('wfebpg_last_template'));
     if($last_template && !wfebpg_find_saved_template($last_template))$last_template='';
-    $saved_image_ids=array_values(array_unique(array_filter(array_map('absint',(array)get_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',true)))));
-    $image_pool_enabled=(bool)get_user_meta(get_current_user_id(),'wfebpg_image_pool_enabled',true);
-    $zip_free_fallback=!$ziparchive_available || (bool)get_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',true);
-    $active_tab=sanitize_key($_POST['wfebpg_active_tab']??($_GET['tab']??'generation'));
+    $saved_image_ids=array_values(array_unique(array_filter(array_map('absint',(array)wfebpg_get_setting('wfebpg_image_pool_ids')))));
+    $image_pool_enabled=(bool)wfebpg_get_setting('wfebpg_image_pool_enabled');
+    $zip_free_fallback=!$ziparchive_available || (bool)wfebpg_get_setting('wfebpg_zip_free_fallback');
+    $active_tab=sanitize_key($_POST['wfebpg_active_tab']??($_GET['tab']??wfebpg_get_setting('wfebpg_active_tab','generation')));
     $allowed_tabs=['generation','image-replacement','new-pages','validator','logs'];
     if(!in_array($active_tab,$allowed_tabs,true))$active_tab='generation';
     $template_image_statuses=[];
@@ -142,6 +143,8 @@ function wfebpg_admin(){
     ?>
 <div class="wrap wfebpg-admin" data-server-tab="<?php echo esc_attr($active_tab); ?>" data-template-image-statuses="<?php echo esc_attr(wp_json_encode($template_image_statuses)); ?>" data-template-validator-statuses="<?php echo esc_attr(wp_json_encode($template_validator_statuses)); ?>">
     <h1>Wolf Forge Elementor Page Generator</h1>
+    <p class="description">Settings save automatically and are shared across administrators. Uploaded files must be selected again after refreshing.</p>
+    <p id="wfebpg-settings-status" class="description" role="status" aria-live="polite"></p>
     <?php if(isset($_GET['wfebpg_reset'])): ?><div class="notice notice-success is-dismissible"><p>Generated-page To-Do table cleared. No WordPress pages were deleted and logs were left unchanged.</p></div><?php endif; ?>
 
     <nav class="nav-tab-wrapper wfebpg-tabs" aria-label="Wolf Forge Page Generator sections">
@@ -184,14 +187,14 @@ function wfebpg_admin(){
                         <p><a class="button button-link-delete" href="<?php echo esc_url($clear_templates_url); ?>" onclick="return confirm('Clear all remembered Elementor JSON templates? This does not affect templates already copied into queued jobs.');">Clear Saved JSON Templates</a></p>
                     <?php endif; ?>
                 </td></tr>
-                <tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" value="4" min="1" max="100" style="width:80px"></label><p class="description">Sets the limit for legacy repeatable card groups. Structural <code>data-customID|repeat</code> elements match their DOCX records; child <code>h3</code>/<code>p</code> markers fill each copy.</p></td></tr>
+                <tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" id="wfebpg-widgets-per-section" value="<?php echo esc_attr(wfebpg_get_setting('wfebpg_widgets_per_section',4)); ?>" min="1" max="100" style="width:80px"></label> <label><input type="checkbox" name="widgets_no_limit" id="wfebpg-widgets-no-limit" value="1" <?php checked(wfebpg_get_setting('wfebpg_widgets_no_limit',0)); ?>> No limit</label><p class="description">Sets the number of repeatable widgets per section. Check No limit to keep all widgets for each repeatable group in one section. Structural <code>data-customID|repeat</code> elements match their DOCX records; child <code>h3</code>/<code>p</code> markers fill each copy.</p></td></tr>
                 <tr><th>DOCX Compatibility</th><td>
                     <div class="wfebpg-zip-status <?php echo $ziparchive_available?'is-available':'is-unavailable'; ?>" role="status" aria-live="polite">
                         <strong><?php echo $ziparchive_available?'PHP ZipArchive is available':'PHP ZipArchive was not detected'; ?></strong>
-                        <p><?php echo $ziparchive_available?'DOCX files will use ZipArchive.':'ZipArchive is missing, so the fallback was enabled and saved for your account.'; ?></p>
+                        <p><?php echo $ziparchive_available?'DOCX files will use ZipArchive.':'ZipArchive is missing, so the fallback was enabled and saved for all administrators.'; ?></p>
                     </div>
                     <label><input type="checkbox" name="zip_free_fallback" id="wfebpg-zip-free-fallback" value="1" <?php checked($zip_free_fallback); ?> <?php disabled(!$ziparchive_available); ?>> Enable zip-free DOCX fallback</label>
-                    <p class="description">The fallback requires PHP zlib and supports standard, unencrypted DOCX files. When ZipArchive is available, this setting is saved for your account.</p>
+                    <p class="description">The fallback requires PHP zlib and supports standard, unencrypted DOCX files. When ZipArchive is available, this setting is saved for all administrators.</p>
                 </td></tr>
                 <tr><th>Image Pool</th><td>
                     <label class="wfebpg-toggle"><input type="checkbox" name="image_pool_enabled" id="wfebpg-image-pool-enabled" value="1" <?php checked($image_pool_enabled); ?>> <strong>Enable Media Library Image Pool</strong></label>
@@ -205,8 +208,8 @@ function wfebpg_admin(){
                         <p class="description">Images may repeat across sections and pages, but not within the same repeatable section.</p>
                     </div>
                 </td></tr>
-                <tr><th>Parent Page</th><td><select name="parent"><option value="0">— No Parent —</option><?php foreach($pages as $p):?><option value="<?php echo esc_attr($p->ID);?>"><?php echo esc_html($p->post_title);?></option><?php endforeach;?></select></td></tr>
-                <tr><th>Existing Slugs</th><td><label><input type="checkbox" name="overwrite" value="1"> Overwrite matching existing pages</label><p class="description">If unchecked, a suffix is added to prevent overwriting.</p></td></tr>
+                <tr><th>Parent Page</th><td><select name="parent"><option value="0">— No Parent —</option><?php foreach($pages as $p):?><option value="<?php echo esc_attr($p->ID);?>" <?php selected(wfebpg_get_setting('wfebpg_parent',0),$p->ID); ?>><?php echo esc_html($p->post_title);?></option><?php endforeach;?></select></td></tr>
+                <tr><th>Existing Slugs</th><td><label><input type="checkbox" name="overwrite" value="1" <?php checked(wfebpg_get_setting('wfebpg_overwrite',0)); ?>> Overwrite matching existing pages</label><p class="description">If unchecked, a suffix is added to prevent overwriting.</p></td></tr>
             </table>
             <p><button type="submit" class="button button-primary button-hero">Queue Pages</button> <button type="button" class="button" id="wfebpg-stop-queueing" style="display:none;border-color:#b32d2e;color:#b32d2e">Stop Queueing</button> <span id="wfebpg-queue-status" class="description"></span></p>
         </form>
@@ -331,8 +334,8 @@ function wfebpg_admin(){
     <div class="wfebpg-tab-panel <?php echo $active_tab==='logs'?'is-active':''; ?>" data-tab-panel="logs">
         <h2>Logs</h2>
         <div class="wfebpg-log-toolbar">
-            <label>Level <select id="wfebpg-log-level"><option value="">All</option><option value="success">Success</option><option value="info">Info</option><option value="warning">Warning</option><option value="error">Error</option></select></label>
-            <label>Search <input type="search" id="wfebpg-log-search" placeholder="Search log messages..."></label>
+            <label>Level <select id="wfebpg-log-level"><?php foreach([''=>'All','success'=>'Success','info'=>'Info','warning'=>'Warning','error'=>'Error'] as $level=>$label): ?><option value="<?php echo esc_attr($level); ?>" <?php selected(wfebpg_get_setting('wfebpg_log_level'),$level); ?>><?php echo esc_html($label); ?></option><?php endforeach; ?></select></label>
+            <label>Search <input type="search" value="<?php echo esc_attr(wfebpg_get_setting('wfebpg_log_search')); ?>" id="wfebpg-log-search" placeholder="Search log messages..."></label>
             <span id="wfebpg-log-count" class="description"></span>
         </div>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>"><input type="hidden" name="action" value="wfebpg_clear_logs"><?php wp_nonce_field('wfebpg_clear_logs');?><button class="button wfebpg-danger-button">Clear Logs</button></form>
@@ -475,8 +478,8 @@ function wfebpg_ajax_validate_template(){
             if((int)($doc_file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file($doc_file['tmp_name'])){
                 throw new Exception('Unable to read the uploaded DOCX file.');
             }
-            $allow_fallback=!class_exists('ZipArchive')||(bool)get_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',true);
-            if(!class_exists('ZipArchive'))update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',1);
+            $allow_fallback=!class_exists('ZipArchive')||(bool)wfebpg_get_setting('wfebpg_zip_free_fallback');
+            if(!class_exists('ZipArchive'))update_option('wfebpg_zip_free_fallback',1);
             $doc=WFEBPG_DOCX_Reader::read($doc_file['tmp_name'],$allow_fallback);
         }
 
@@ -492,7 +495,7 @@ function wfebpg_ajax_save_zip_fallback(){
         wp_send_json_error(['message'=>'Unauthorized.'],403);
     }
     $enabled=!class_exists('ZipArchive') || !empty($_POST['enabled']);
-    update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',$enabled?1:0);
+    update_option('wfebpg_zip_free_fallback',$enabled?1:0);
     wp_send_json_success(['enabled'=>$enabled,'ziparchive_available'=>class_exists('ZipArchive')]);
 }
 
@@ -583,7 +586,7 @@ function wfebpg_ajax_upload_docx(){
             @unlink($file['tmp_name']);
         }
         $zip_free_fallback=!class_exists('ZipArchive') || !empty($_POST['zip_free_fallback']);
-        if(!class_exists('ZipArchive'))update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',1);
+        if(!class_exists('ZipArchive'))update_option('wfebpg_zip_free_fallback',1);
         $kind=wfebpg_classify_docx($dest,$zip_free_fallback);
         $map_file=trailingslashit($dir).'.original-names.json';
         $map=[];
@@ -612,9 +615,9 @@ function wfebpg_ajax_rename_template(){
     if(!$old_path||!@rename($old_path,$new_path))wp_send_json_error(['message'=>'Unable to rename the saved template.'],500);
 
     $maps=wfebpg_template_image_maps();
-    if(isset($maps[$old])){$maps[$new]=$maps[$old];unset($maps[$old]);update_user_meta(get_current_user_id(),'wfebpg_template_image_maps',$maps);}
-    $last=sanitize_file_name((string)get_user_meta(get_current_user_id(),'wfebpg_last_template',true));
-    if($last===$old)update_user_meta(get_current_user_id(),'wfebpg_last_template',$new);
+    if(isset($maps[$old])){$maps[$new]=$maps[$old];unset($maps[$old]);update_option('wfebpg_template_image_maps',$maps);}
+    $last=sanitize_file_name((string)wfebpg_get_setting('wfebpg_last_template'));
+    if($last===$old)update_option('wfebpg_last_template',$new);
     wp_send_json_success(['name'=>$new,'old_name'=>$old,'message'=>'Template renamed successfully.']);
 }
 
@@ -625,9 +628,9 @@ function wfebpg_ajax_delete_template(){
     if(!$name||!$path)wp_send_json_error(['message'=>'Template not found.'],404);
     if(!@unlink($path))wp_send_json_error(['message'=>'Unable to delete the saved template.'],500);
     $maps=wfebpg_template_image_maps();
-    if(isset($maps[$name])){unset($maps[$name]);update_user_meta(get_current_user_id(),'wfebpg_template_image_maps',$maps);}
-    $last=sanitize_file_name((string)get_user_meta(get_current_user_id(),'wfebpg_last_template',true));
-    if($last===$name)delete_user_meta(get_current_user_id(),'wfebpg_last_template');
+    if(isset($maps[$name])){unset($maps[$name]);update_option('wfebpg_template_image_maps',$maps);}
+    $last=sanitize_file_name((string)wfebpg_get_setting('wfebpg_last_template'));
+    if($last===$name)update_option('wfebpg_last_template','');
     wp_send_json_success(['name'=>$name,'message'=>'Template deleted successfully.']);
 }
 
@@ -637,7 +640,7 @@ function wfebpg_ajax_set_last_template(){
     }
     $name=sanitize_file_name(wp_unslash($_POST['template']??''));
     if($name && !wfebpg_find_saved_template($name)) wp_send_json_error(['message'=>'Template not found.'],404);
-    update_user_meta(get_current_user_id(),'wfebpg_last_template',$name);
+    update_option('wfebpg_last_template',$name);
     wp_send_json_success(['name'=>$name]);
 }
 
@@ -648,7 +651,7 @@ function wfebpg_ajax_save_template(){
     try {
         if(empty($_FILES['template'])) throw new Exception('Please select an Elementor JSON template.');
         $path=wfebpg_save_template_upload($_FILES['template']);
-        update_user_meta(get_current_user_id(),'wfebpg_last_template',sanitize_file_name(basename($path)));
+        update_option('wfebpg_last_template',sanitize_file_name(basename($path)));
         wp_send_json_success(['name'=>basename($path)]);
     } catch(Throwable $e) {
         wp_send_json_error(['message'=>$e->getMessage()],400);
@@ -656,7 +659,7 @@ function wfebpg_ajax_save_template(){
 }
 
 function wfebpg_template_image_signature($id,$url){ return md5((string)$id.'|'.(string)$url); }
-function wfebpg_template_image_maps(){ $maps=get_user_meta(get_current_user_id(),'wfebpg_template_image_maps',true); return is_array($maps)?$maps:[]; }
+function wfebpg_template_image_maps(){ $maps=wfebpg_get_setting('wfebpg_template_image_maps'); return is_array($maps)?$maps:[]; }
 function wfebpg_template_image_filename($url){ $path=parse_url((string)$url,PHP_URL_PATH); $base=$path?basename($path):basename((string)$url); return preg_replace('/[-_]+/',' ',pathinfo($base,PATHINFO_FILENAME)); }
 function wfebpg_template_image_matches($json){
     $data=json_decode((string)$json,true); if(!is_array($data)) return []; $found=[];
@@ -804,7 +807,7 @@ function wfebpg_ajax_save_template_image_map(){
     $name=sanitize_file_name(wp_unslash($_POST['template']??'')); if(!$name||!wfebpg_find_saved_template($name))wp_send_json_error(['message'=>'Template not found.'],404);
     $raw=json_decode(wp_unslash($_POST['map']??'{}'),true); if(!is_array($raw))$raw=[]; $clean=[];
     foreach($raw as $key=>$id){ $id=absint($id); if(preg_match('/^[a-f0-9]{32}$/',$key)&&$id&&wfebpg_attachment_image_data($id))$clean[$key]=$id; }
-    $maps=wfebpg_template_image_maps(); $maps[$name]=$clean; update_user_meta(get_current_user_id(),'wfebpg_template_image_maps',$maps); wp_send_json_success(['count'=>count($clean),'status'=>wfebpg_template_image_status($name)]);
+    $maps=wfebpg_template_image_maps(); $maps[$name]=$clean; update_option('wfebpg_template_image_maps',$maps); wp_send_json_success(['count'=>count($clean),'status'=>wfebpg_template_image_status($name)]);
 }
 function wfebpg_apply_template_image_map($json,$template_name){
     $maps=wfebpg_template_image_maps(); $map=$maps[$template_name]??[]; if(!$map)return $json; $data=json_decode((string)$json,true); if(!is_array($data))return $json;
@@ -823,8 +826,8 @@ function wfebpg_ajax_save_image_pool(){
         if($id && get_post_type($id)==='attachment' && strpos((string)get_post_mime_type($id),'image/')===0) $ids[]=$id;
     }
     $ids=array_values(array_unique($ids));
-    update_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',$ids);
-    update_user_meta(get_current_user_id(),'wfebpg_image_pool_enabled',!empty($_POST['image_pool_enabled']) ? 1 : 0);
+    update_option('wfebpg_image_pool_ids',$ids);
+    update_option('wfebpg_image_pool_enabled',!empty($_POST['image_pool_enabled']) ? 1 : 0);
     wp_send_json_success(['ids'=>$ids,'enabled'=>!empty($_POST['image_pool_enabled'])]);
 }
 
@@ -847,7 +850,7 @@ function wfebpg_handle_generate(){
         }
     }catch(Throwable $e){wp_die(esc_html($e->getMessage()));}
 
-    update_user_meta(get_current_user_id(),'wfebpg_last_template',sanitize_file_name(basename($template_path)));
+    update_option('wfebpg_last_template',sanitize_file_name(basename($template_path)));
 
     $upload=wp_upload_dir();$base=trailingslashit($upload['basedir']).'wfebpg/'.wp_generate_uuid4();wp_mkdir_p($base);
     $raw_template=file_get_contents($template_path);
@@ -856,24 +859,27 @@ function wfebpg_handle_generate(){
     $template_copy=$base.'/template.json';
     if(file_put_contents($template_copy,$mapped_template,LOCK_EX)===false)wp_die('Unable to copy the selected Elementor template for this job.');
 
-    $parent=absint($_POST['parent']??0);$overwrite=!empty($_POST['overwrite']);$widgets_per_section=max(1,min(100,absint($_POST['widgets_per_section']??4)));$count=0;
+    $parent=absint($_POST['parent']??0);$overwrite=!empty($_POST['overwrite']);$widgets_per_section=max(1,min(100,absint($_POST['widgets_per_section']??wfebpg_get_setting('wfebpg_widgets_per_section',4))));$count=0;
+    $preferences=wfebpg_sanitize_settings([
+        'parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,
+        'widgets_no_limit'=>!empty($_POST['widgets_no_limit']),
+    ]);
+    foreach($preferences as $key=>$value)update_option($key,$value,false);
     $zip_free_fallback=!class_exists('ZipArchive') || !empty($_POST['zip_free_fallback']);
-    update_user_meta(get_current_user_id(),'wfebpg_zip_free_fallback',$zip_free_fallback?1:0);
+    update_option('wfebpg_zip_free_fallback',$zip_free_fallback?1:0);
     $image_pool_enabled=!empty($_POST['image_pool_enabled']);
-    update_user_meta(get_current_user_id(),'wfebpg_image_pool_enabled',$image_pool_enabled ? 1 : 0);
+    update_option('wfebpg_image_pool_enabled',$image_pool_enabled ? 1 : 0);
     $image_pool_ids=[];
     if($image_pool_enabled && !empty($_POST['image_pool_ids'])){
         $raw=explode(',',sanitize_text_field(wp_unslash($_POST['image_pool_ids'])));
         foreach($raw as $id){$id=absint($id);if($id && get_post_type($id)==='attachment' && strpos((string)get_post_mime_type($id),'image/')===0)$image_pool_ids[]=$id;}
         $image_pool_ids=array_values(array_unique($image_pool_ids));
-        update_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',$image_pool_ids);
+        update_option('wfebpg_image_pool_ids',$image_pool_ids);
     } elseif($image_pool_enabled) {
         // An enabled pool with no submitted IDs intentionally becomes empty.
-        update_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',[]);
-    } else {
-        // Disabling the pool should not destroy the saved pool configuration.
-        $image_pool_ids=array_values(array_unique(array_filter(array_map('absint',(array)get_user_meta(get_current_user_id(),'wfebpg_image_pool_ids',true)))));
+        update_option('wfebpg_image_pool_ids',[]);
     }
+    // Disabled pools keep their saved selection; new jobs receive no pool IDs.
 
     $sources=[];$original_names=[];
     if($has_batch){
@@ -899,7 +905,7 @@ function wfebpg_handle_generate(){
         $original_name=(string)($original_names[$name] ?? $original_names[$source] ?? $name);
         $dest=$base.'/'.sanitize_file_name($name);
         if($has_batch){if(!copy($source,$dest))continue;}else{if(!move_uploaded_file($source,$dest))continue;}
-        WFEBPG_Generator::enqueue(['docx'=>$dest,'page_title'=>$original_name,'template'=>$template_copy,'mode'=>'auto','parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'image_pool_ids'=>$image_pool_ids,'zip_free_fallback'=>$zip_free_fallback]);
+        WFEBPG_Generator::enqueue(['docx'=>$dest,'page_title'=>$original_name,'template'=>$template_copy,'mode'=>'auto','parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'widgets_no_limit'=>!empty($_POST['widgets_no_limit']),'image_pool_ids'=>$image_pool_ids,'zip_free_fallback'=>$zip_free_fallback]);
         $count++;
     }
     if($has_batch){foreach($sources as $source)@unlink($source);$batch_dir=wfebpg_docx_batch_dir($docx_batch);if($batch_dir){@unlink(trailingslashit($batch_dir).'.original-names.json');@rmdir($batch_dir);}}

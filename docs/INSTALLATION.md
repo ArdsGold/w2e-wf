@@ -16,7 +16,7 @@
 4. Activate the plugin.
 5. Open **Wolf Forge Page Generator** in the WordPress admin.
    - Page Generation shows whether the site's PHP has `ZipArchive`.
-   - If it is missing, the plugin enables the fallback for your account. The fallback requires PHP zlib.
+   - If it is missing, the plugin enables the fallback for all administrators. The fallback requires PHP zlib.
 6. Upload an Elementor JSON template.
 7. Validate the template.
 8. Upload a small DOCX test batch.
@@ -106,3 +106,9 @@ Use **Process Queue Now** and inspect the logs. On a production server, verify W
 ## Production recommendation
 
 Test with one or two DOCX files before a large batch. Keep a backup of the original Elementor JSON.
+
+## Updating to r2.2.2
+
+Install the updated plugin files; both the WordPress plugin version and `WFEBPG_VERSION` are r2.2.2. Open the dashboard using the administrator whose existing template, image, and fallback preferences should seed the shared settings. Settings then save automatically for all administrators. File uploads must be selected again after refresh. Existing queued jobs retain their captured options.
+
+Check the No limit control and persistence behavior described in [the release notes](RELEASE-r2.2.2.md).

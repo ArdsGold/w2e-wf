@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.2.1
+**Version:** r2.2.2  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
@@ -20,6 +20,8 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 - Reads normal DOCX Heading 1/2/3 styles and paragraphs.
 - Maps content with `data-customID` markers.
 - Supports fixed and repeatable content blocks.
+- Offers **No limit** to keep each repeatable group together in one section.
+- Automatically remembers dashboard settings across refreshes and shares them across administrators.
 - Supports the r2.2.0 structural `data-customID|repeat` marker for complete Elementor elements.
 - Structural repeat regions automatically shrink, expand, or disappear to match their scoped DOCX record count.
 - Existing `h3|repeat`, `h3|p|repeat`, and legacy `|repeatable` behavior remains supported.
@@ -52,6 +54,16 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 This release is a **rebrand of the existing WFEBPG codebase**. Internal option names and hooks were deliberately not renamed. That means the new code can continue reading the existing plugin's saved templates, queue data, logs, image-pool selections, and generated-page records.
 
 Because the public plugin slug has been rebranded, treat this ZIP as a replacement build when installing it over an existing copy. Do not keep both copies active at the same time.
+
+---
+
+## Remembered settings and repeat limits
+
+In **Page Generation > Repeatable Section**, check **No limit** beside **Widgets per section** to gray out the number field and put all widgets for each repeatable group into one section. Separate DOCX groups remain separate. Uncheck it to reuse the previous number. Numeric mode retains its 1–100 limit; unlimited mode also supports groups larger than 100 items.
+
+Settings save automatically without submitting or generating pages and are shared across all administrators on this WordPress site. Remembered controls include the repeat limit and No limit checkbox, parent page, overwrite checkbox, image-pool enablement and selections, zip-free fallback, selected saved template, template image mappings, active tab, and log filters. The overwrite checkbox remains enabled on future visits if you leave it enabled.
+
+On first use, existing per-administrator template, image, and fallback preferences seed the shared settings where no shared value exists. Subsequent administrator changes use those shared values. Already-open dashboards are not synchronized live; refresh to load another administrator's saved changes. File inputs must be selected again after refreshing; uploads and queue actions are not replayed.
 
 ---
 
@@ -308,13 +320,20 @@ wolf-forge-elementor-page-generator/
 │   ├── INSTALLATION.md
 │   ├── MARKER-SYSTEM.md
 │   ├── RELEASE-r2.1.0.md
-│   └── RELEASE-r2.2.0.md
+│   ├── RELEASE-r2.2.0.md
+│   └── RELEASE-r2.2.2.md
 ├── includes/
+│   ├── admin-settings.php
 │   ├── class-docx-reader.php
 │   ├── class-generator.php
 │   ├── class-logger.php
 │   ├── class-phone-linker.php
 │   └── class-template.php
+├── tests/
+│   ├── admin-settings.js
+│   ├── admin-settings.php
+│   ├── generation-mapping.php
+│   └── repeatable-limit.php
 └── README.md
 ```
 
@@ -350,9 +369,11 @@ Changing those identifiers as part of a cosmetic rebrand would turn a safe renam
 
 The public-facing brand can change without renaming these internal identifiers.
 
-### Why the version is `r2.2.0`
+### Why the version is `r2.2.2`
 
-`r2.2.0` adds structural repeat elements using `data-customID|repeat`. The marked Elementor element is the clone boundary, child content markers populate each clone, and the final number of structural repeat elements follows the matching DOCX record count.
+`r2.2.2` includes the **No limit** repeatable setting, automatic shared dashboard preferences, paragraph mapping to Heading widgets, FAQ scope corrections, and structural/mixed repeat-group fixes. It retains the structural repeat markers introduced in r2.2.0. See [release notes](docs/RELEASE-r2.2.2.md).
+
+Text destinations use the supported widget fields documented in the [marker reference](docs/MARKER-SYSTEM.md). Automatic discovery of every widget's text controls is not part of r2.2.2. Existing generated pages must be regenerated to receive mapping corrections.
 
 ---
 
@@ -378,13 +399,15 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
-- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.0 admin tabs, shared template state, and notification indicators.
-- [`docs/RELEASE-r2.2.0.md`](docs/RELEASE-r2.2.0.md) — r2.2.0 release scope and QA checklist.
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.0 changes.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.2 admin tabs, shared preferences, and notification indicators.
+- [`docs/RELEASE-r2.2.2.md`](docs/RELEASE-r2.2.2.md) — current release scope and verification commands.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.2 changes.
 
 ### Historical documentation
 
-These files document earlier releases and are separate from the current r2.2.0 documentation:
+These files document earlier releases and are separate from the current r2.2.2 documentation:
+
+- [`docs/RELEASE-r2.2.0.md`](docs/RELEASE-r2.2.0.md) — structural repeats and preview workflow.
 
 - [`docs/RELEASE-r2.1.0.md`](docs/RELEASE-r2.1.0.md) — historical r2.1.0 release.
 - [`docs/CODE-AUDIT-r2.1.0.md`](docs/CODE-AUDIT-r2.1.0.md) — r2.1.0 maintenance audit.
@@ -394,4 +417,4 @@ These files document earlier releases and are separate from the current r2.2.0 d
 
 ## Changelog
 
-See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.0 release notes.
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.2 release notes.

@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Wolf Forge Elementor Page Generator
- * Description: Generate Elementor pages from DOCX files and JSON templates with marker-based content mapping, repeatable layouts, background processing, template validation and previews, Media Library image tools, phone links, and logs.
- * Version: r2.2.0
+ * Description: Generate Elementor pages from DOCX files and JSON templates with marker-based paragraph and FAQ mapping, optional unlimited repeatable sections, automatically saved shared settings, background processing, template validation and previews, Media Library image tools, phone links, and logs.
+ * Version: r2.2.2
  * Author: Macky Villafuerte, Arden Guinto
  * Text Domain: wolf-forge-elementor-page-generator
  * Requires at least: 6.0
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WFEBPG_VERSION', 'r2.2.0');
+define('WFEBPG_VERSION', 'r2.2.2');
 define('WFEBPG_DIR', plugin_dir_path(__FILE__));
 define('WFEBPG_URL', plugin_dir_url(__FILE__));
 
@@ -21,6 +21,7 @@ require_once WFEBPG_DIR . 'includes/class-template.php';
 require_once WFEBPG_DIR . 'includes/class-generator.php';
 require_once WFEBPG_DIR . 'includes/class-phone-linker.php';
 require_once WFEBPG_DIR . 'includes/class-logger.php';
+require_once WFEBPG_DIR . 'includes/admin-settings.php';
 require_once WFEBPG_DIR . 'admin/admin-page.php';
 
 register_activation_hook(__FILE__, function () {

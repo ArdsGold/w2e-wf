@@ -1,5 +1,23 @@
 # Changelog
 
+## r2.2.2 — 2026-10-20
+
+- Consolidated the current fixes and documentation under r2.2.2. Documented supported text destinations and section-heading-first behavior; retained the existing mapper without introducing universal widget-control discovery.
+- Fixed `data-customID|p` on Heading widgets by writing their `title` field. Combined heading/paragraph markers keep their heading when no separate body field exists.
+- Fixed FAQ Accordion/Toggle scope selection when the widget precedes its section's H2 in Elementor's JSON. Mapping visits a section's sole marked H1/H2 branch first without rearranging the saved layout. Generation and Validator traces use the same traversal order.
+- Internal FAQ repeaters now populate even when the page has no external card repeat groups.
+- Fixed structural groups consuming later scopes after row expansion by processing structural collections in reverse order. Mixed structural and widget repeat groups now both populate.
+- Expanded regressions to cover multiple numeric structural groups, mixed repeat styles, paragraph Heading widgets, FAQ column order, Validator traces, and the supplied Services template/DOCX through in-memory generation checks.
+- Added **No limit** beside **Widgets per section**. Checking it grays out and disables the numeric field; unchecking restores its previous value.
+- Unlimited mode keeps all widgets for each repeatable group in one section, supports more than 100 records, and keeps separate groups independent. Both structural and legacy/widget repeat generation paths support it; numeric limits still work when unchecked.
+- Added automatic, site-wide settings shared across administrators: repeat controls, parent page, overwrite, image-pool enablement and images, zip-free fallback, saved template, image mappings, active tab, and log filters.
+- Existing per-administrator template, image, and fallback preferences seed missing shared settings on first use. False and empty selections persist; file uploads must be selected again after refresh.
+- Added authenticated, nonce-protected preference autosave with validation, ordered patches, and visible save/error status. Replaced browser session tab memory with shared saved state and updated the URL when switching tabs.
+- Fixed saved image IDs re-enabling a disabled image pool. Disabled pools retain selections without attaching them to new jobs. Generation submissions also preserve the numeric limit while No limit disables its input.
+- Set the plugin header and runtime version to r2.2.2 and updated the README, dashboard, installation, marker, and architecture documentation. Added runnable generation and preference checks.
+
+See [`RELEASE-r2.2.2.md`](RELEASE-r2.2.2.md) for behavior, upgrade details, and checks.
+
 ## r2.2.0
 
 - Added structural `data-customID|repeat` markers for complete Elementor items.

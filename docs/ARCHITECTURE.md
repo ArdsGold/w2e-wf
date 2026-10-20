@@ -41,4 +41,14 @@ Jobs are stored in the `wfebpg_queue` WordPress option. A lock prevents overlapp
 
 The generator populates only marked elements. Structural `data-customID|repeat` markers identify whole Elementor items; heading/widget repeat markers and legacy marker forms remain supported.
 
+Scope-sensitive traversals share `mapping_child_keys()`: within a Section/Container with one marked H1/H2 branch, that branch is visited first. The saved element arrays keep their original order. The rule applies to content mapping, repeat collections, internal FAQs, inline streams, structural location lookup, and Validator traces. Internal FAQ population runs independently of external card collections. Structural regions expand in reverse scope order to avoid renumbering later collections; remaining widget collections are populated afterward.
+
 The `WFEBPG` prefix is part of the stored-data and WordPress integration contract. Options, user metadata, AJAX actions, cron hooks, generated-page metadata, PHP class names, and CSS selectors retain their existing names to avoid a data migration.
+
+## Shared dashboard settings (r2.2.2)
+
+`includes/admin-settings.php` reads shared `wfebpg_*` WordPress options, seeds missing preferences from the first visiting administrator's existing user metadata, and validates autosave patches. `wfebpg_save_settings` requires `manage_options` and a valid AJAX nonce; its allowlist covers repeat settings, parent page, overwrite, image-pool enablement, active tab, and log filters. Existing template, image-pool, image-map, and fallback endpoints now read/write shared options too. Unrelated settings are not overwritten by a patch.
+
+The JavaScript autosave queue serializes dashboard patches, shows save status, and retains failed changes for retry. Active tabs use saved server state instead of sessionStorage. The image-pool toggle is restored independently of selected image IDs. Temporary previews and notification acknowledgments continue using user metadata.
+
+Queued jobs capture their generation settings at submission, including `widgets_no_limit`; later dashboard edits do not alter queued jobs. Unlimited generation uses the scoped item count as the section capacity in the structural path and disables splitting per collection in the widget path.

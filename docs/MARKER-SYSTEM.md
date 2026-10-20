@@ -23,6 +23,14 @@ data-customID|p
 
 The first token is the content source. Additional tokens are behavior/content flags.
 
+### Text destinations and section scope in r2.2.2
+
+Markers choose DOCX content; the mapper writes it into supported text fields on the marked widget. Heading destinations include `title`, `title_text`, `heading`, `text`, supported ElementsKit title fields, and the first supported Icon List text item. Paragraph destinations include `editor`, `description_text`, `ekit_icon_box_description_text`, `text`, `content`, and `html`. A paragraph-only marker can also fill a Heading widget's `title` field. Text Editor combined markers render heading and paragraph content together; a combined marker does not replace a title-only widget's heading with its body.
+
+This is a known-field mapper. It does not automatically discover every third-party widget's text controls or populate all string settings. Keep using supported fields and validate the template with its DOCX.
+
+Within a Section or Container, if exactly one non-repeatable `h1` or `h2` marker exists, the mapper visits the child branch containing that marker first to establish the DOCX scope. This allows an FAQ Accordion to appear before its H2 in the exported JSON. It changes traversal order only, preserving the saved layout. With zero or multiple such headings, the original branch order is used. Sections map by DOCX heading hierarchy and occurrence order, not by matching heading text such as “FAQs.”
+
 ### Repeat marker
 
 The short form is:
@@ -79,7 +87,7 @@ For each matching record in the DOCX scope, the generator:
 
 This works for cards, service boxes, process steps, benefits, and other layouts.
 
-The **Widgets per section** setting controls the number of generated cards per row. If the template has prototypes in multiple rows, all prototypes are reused in order. Generated repeat Columns use the configured row width; an incomplete final row is centered. A scope with no matching records produces no repeat items.
+The **Widgets per section** setting controls the number of generated cards per row. In r2.2.2, checking **No limit** grays out this input and keeps all cards for each repeatable group in one section; unchecking restores the saved numeric limit. Both controls save automatically and are shared across administrators. If the template has prototypes in multiple rows, all prototypes are reused in order. Generated repeat Columns use the configured row width; an incomplete final row is centered. A scope with no matching records produces no repeat items.
 
 ## Widget-level repeatable Text Editor
 

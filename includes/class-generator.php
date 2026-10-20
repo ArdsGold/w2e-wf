@@ -134,30 +134,12 @@ class WFEBPG_Generator {
             $settings = isset($el['settings']) && is_array($el['settings']) ? $el['settings'] : [];
             $type = $marker['type'];
 
-            // A Toggle is a single Elementor widget that contains many tab
-            // items. When its marker requests h3|p, populate the tab repeater
-            // from the complete H3/P stream in the current H2 scope instead
-            // of treating the Toggle like a single title field.
+            // An internal FAQ consumes the section's H3/P stream, not one title.
             if ($type === 'h3'
-                && strtolower((string) ($el['widgetType'] ?? '')) === 'toggle'
+                && in_array(strtolower((string) ($el['widgetType'] ?? '')), self::INTERNAL_REPEAT_WIDGETS, true)
                 && in_array('p', (array) ($marker['flags'] ?? []), true)) {
-                $parent_level = 2;
-                $parent_ordinal = (int) ($active_doc_paths[2] ?? 0);
-                if ($parent_ordinal > 0) {
-                    $items = self::build_repeatable_items_for_scope($doc, 3, $parent_level, $parent_ordinal);
-                    if ($items) {
-                        $tabs = [];
-                        foreach ($items as $item) {
-                            $tabs[] = [
-                                'tab_title' => (string) ($item['heading'] ?? ''),
-                                'tab_content' => wpautop(implode("\n\n", (array) ($item['content'] ?? []))),
-                                '_id' => self::new_element_id(),
-                            ];
-                        }
-                        $settings['tabs'] = $tabs;
-                    }
-                }
-                $el['settings'] = $settings;
+                $items = self::build_repeatable_items_for_template_scope($doc, 3, $template_ordinals);
+                self::populate_internal_repeatable_widget($el, $items);
                 return;
             }
 
@@ -237,14 +219,34 @@ class WFEBPG_Generator {
      * Walk template elements in visual/document order while retaining the
      * same global preceding-heading context across nested Elementor nodes.
      */
-    private static function walk_nonrepeat_hierarchy(&$elements, $callback) {
-        foreach ($elements as &$el) {
+    private static function walk_nonrepeat_hierarchy(&$elements, $callback, $scope = false) {
+        foreach (self::mapping_child_keys($elements, $scope) as $key) {
+            $el =& $elements[$key];
+            if (WFEBPG_Template::is_repeatable($el)) continue;
             $callback($el);
             if (isset($el['elements']) && is_array($el['elements'])) {
-                self::walk_nonrepeat_hierarchy($el['elements'], $callback);
+                self::walk_nonrepeat_hierarchy($el['elements'], $callback, self::is_repeatable_root($el));
             }
         }
         unset($el);
+    }
+
+    /** Visit a section's sole scope heading first without rearranging its layout. */
+    private static function mapping_child_keys($nodes, $scope = false) {
+        $keys = array_keys((array) $nodes);
+        if (!$scope) return $keys;
+        $heading_keys = [];
+        $find = function ($node, $key) use (&$find, &$heading_keys) {
+            if (!is_array($node) || WFEBPG_Template::is_repeatable($node)) return;
+            if (in_array(WFEBPG_Template::custom_id($node), ['h1', 'h2'], true)) $heading_keys[] = $key;
+            foreach ((array) ($node['elements'] ?? []) as $child) $find($child, $key);
+        };
+        foreach ((array) $nodes as $key => $node) $find($node, $key);
+        if (count($heading_keys) !== 1) return $keys;
+        $first = $heading_keys[0];
+        return array_merge([$first], array_values(array_filter($keys, static function ($key) use ($first) {
+            return $key !== $first;
+        })));
     }
 
     /** Build heading-aware DOCX blocks with a hierarchical path such as 1.2.3. */
@@ -343,7 +345,7 @@ class WFEBPG_Generator {
         }
     }
 
-    private static function set_widget_text(&$settings, $value) {
+    private static function set_widget_text(&$settings, $value, $allow_title = true) {
         $html = wpautop($value);
         if (array_key_exists('editor', $settings)) {
             $settings['editor'] = $html;
@@ -357,6 +359,8 @@ class WFEBPG_Generator {
             $settings['content'] = $html;
         } elseif (array_key_exists('html', $settings)) {
             $settings['html'] = $html;
+        } elseif ($allow_title && array_key_exists('title', $settings)) {
+            $settings['title'] = nl2br(esc_html($value));
         }
     }
 
@@ -397,7 +401,7 @@ class WFEBPG_Generator {
         }
 
         if ($has_paragraph && $content !== '') {
-            self::set_widget_text($settings, $content);
+            self::set_widget_text($settings, $content, !$has_heading);
         }
     }
 
@@ -462,8 +466,9 @@ class WFEBPG_Generator {
         $collections = [];
         $ordinals = [];
 
-        $walk = function ($nodes, $root_id = null) use (&$walk, &$collections, &$ordinals, $doc) {
-            foreach ((array) $nodes as $node) {
+        $walk = function ($nodes, $root_id = null, $scope = false) use (&$walk, &$collections, &$ordinals, $doc) {
+            foreach (self::mapping_child_keys($nodes, $scope) as $key) {
+                $node = $nodes[$key];
                 if (!is_array($node)) continue;
 
                 $marker = WFEBPG_Template::marker($node);
@@ -558,7 +563,7 @@ class WFEBPG_Generator {
                 }
 
                 if (isset($node['elements']) && is_array($node['elements'])) {
-                    $walk($node['elements'], $next_root_id);
+                    $walk($node['elements'], $next_root_id, self::is_repeatable_root($node) && !WFEBPG_Template::is_repeatable($node));
                 }
             }
         };
@@ -618,8 +623,9 @@ class WFEBPG_Generator {
     private static function build_internal_repeatable_items($doc, $elements) {
         $collections = [];
         $ordinals = [];
-        $walk = function ($nodes) use (&$walk, &$collections, &$ordinals, $doc) {
-            foreach ((array) $nodes as $node) {
+        $walk = function ($nodes, $scope = false) use (&$walk, &$collections, &$ordinals, $doc) {
+            foreach (self::mapping_child_keys($nodes, $scope) as $key) {
+                $node = $nodes[$key];
                 if (!is_array($node)) continue;
                 $marker = WFEBPG_Template::marker($node);
                 if (preg_match('/^h([1-9][0-9]*)$/', $marker['type'], $hm)) {
@@ -638,7 +644,7 @@ class WFEBPG_Generator {
                         'items' => self::build_repeatable_items_for_scope($doc, $target_level, $parent_level, $parent_ordinal),
                     ];
                 }
-                if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements']);
+                if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements'], self::is_repeatable_root($node) && !WFEBPG_Template::is_repeatable($node));
             }
         };
         $walk($elements);
@@ -656,8 +662,9 @@ class WFEBPG_Generator {
     /** Populate internal repeater widgets without cloning the widget itself. */
     private static function populate_internal_repeaters(&$elements, $doc) {
         $ordinals = [];
-        $walk = function (&$nodes) use (&$walk, &$ordinals, $doc) {
-            foreach ($nodes as &$node) {
+        $walk = function (&$nodes, $scope = false) use (&$walk, &$ordinals, $doc) {
+            foreach (self::mapping_child_keys($nodes, $scope) as $key) {
+                $node =& $nodes[$key];
                 if (!is_array($node)) continue;
                 $marker = WFEBPG_Template::marker($node);
                 if (preg_match('/^h([1-9][0-9]*)$/', $marker['type'], $hm)) {
@@ -674,7 +681,7 @@ class WFEBPG_Generator {
                     $items = self::build_repeatable_items_for_scope($doc, $target_level, $parent_level, $parent_ordinal);
                     self::populate_internal_repeatable_widget($node, $items);
                 }
-                if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements']);
+                if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements'], self::is_repeatable_root($node) && !WFEBPG_Template::is_repeatable($node));
             }
             unset($node);
         };
@@ -779,8 +786,9 @@ class WFEBPG_Generator {
     private static function populate_inline_repeat_text_editors(&$elements, $doc) {
         $ordinals = [];
 
-        $walk = function (&$nodes) use (&$walk, &$ordinals, $doc) {
-            foreach ($nodes as &$node) {
+        $walk = function (&$nodes, $scope = false) use (&$walk, &$ordinals, $doc) {
+            foreach (self::mapping_child_keys($nodes, $scope) as $key) {
+                $node =& $nodes[$key];
                 if (!is_array($node)) continue;
 
                 $marker = WFEBPG_Template::marker($node);
@@ -842,7 +850,7 @@ class WFEBPG_Generator {
                 }
 
                 if (isset($node['elements']) && is_array($node['elements'])) {
-                    $walk($node['elements']);
+                    $walk($node['elements'], self::is_repeatable_root($node) && !WFEBPG_Template::is_repeatable($node));
                 }
             }
             unset($node);
@@ -1069,17 +1077,16 @@ class WFEBPG_Generator {
      * each Elementor repeatable region. Legacy templates may still pass one
      * flat repeatable array; modern templates pass a section-ID keyed map.
      */
-    private static function populate_repeatables(&$elements, $repeatables, $widgets_per_section = 0, $image_pool = [], $doc = null) {
+    private static function populate_repeatables(&$elements, $repeatables, $widgets_per_section = 0, $image_pool = [], $doc = null, $no_limit = false) {
         if (!$repeatables) return;
-        if (is_array($doc)) self::populate_internal_repeaters($elements, $doc);
 
         $is_collection_map = self::is_repeatable_collection_map($repeatables);
         $has_structural_repeat = $is_collection_map && self::has_structural_repeat_collection($repeatables);
 
-        if (!$has_structural_repeat && $widgets_per_section > 0 && self::expand_repeatable_sections(
+        if (!$has_structural_repeat && ($no_limit || $widgets_per_section > 0) && self::expand_repeatable_sections(
             $elements,
             $repeatables,
-            $widgets_per_section,
+            $no_limit ? 0 : $widgets_per_section,
             $image_pool,
             $is_collection_map
         )) {
@@ -1132,7 +1139,8 @@ class WFEBPG_Generator {
                 if (!empty($collection['structural_repeat'])) $structural_keys[] = $key;
             }
 
-            foreach ($structural_keys as $collection_key) {
+            // Work backwards so cloned scope headings cannot renumber a later region.
+            foreach (array_reverse($structural_keys) as $collection_key) {
                 $items = (array) ($repeatables[$collection_key]['items'] ?? []);
                 $locations = [];
                 self::find_repeatable_locations($elements, $locations);
@@ -1149,13 +1157,19 @@ class WFEBPG_Generator {
                 // setting as the legacy repeat engine. The marker still defines
                 // the card itself, while this setting defines how many cards
                 // belong in each visual Elementor Section/row.
-                $limit = max(1, (int) $widgets_per_section);
+                $limit = $no_limit ? max(1, count($items)) : max(1, (int) $widgets_per_section);
                 self::rebuild_structural_repeat_rows(
                     $elements,
                     $groups,
                     $items,
                     $limit
                 );
+            }
+            $widget_collections = array_filter($repeatables, static function ($collection) {
+                return empty($collection['structural_repeat']);
+            });
+            if ($widget_collections) {
+                self::populate_repeatables($elements, $widget_collections, $widgets_per_section, $image_pool, $doc, $no_limit);
             }
             return;
         }
@@ -1225,7 +1239,8 @@ class WFEBPG_Generator {
         if (!is_array($section) || !isset($section['elements']) || !is_array($section['elements'])) return $locations;
         self::find_repeatable_locations($section['elements'], $locations);
         return array_values(array_filter($locations, static function ($location) {
-            return !self::is_repeatable_root($location['node'] ?? []);
+            return !self::is_repeatable_root($location['node'] ?? [])
+                && WFEBPG_Template::custom_id($location['node'] ?? []) !== 'repeat';
         }));
     }
 
@@ -1298,14 +1313,16 @@ class WFEBPG_Generator {
                     $prototype_count = count($prototype_groups);
                     if ($prototype_count === 0) continue;
 
-                    $section_count = (int) ceil($item_count / $limit);
+                    // Zero disables splitting for this collection only.
+                    $section_limit = $limit > 0 ? $limit : $item_count;
+                    $section_count = (int) ceil($item_count / $section_limit);
                     $replacement = [];
 
                     for ($section_index = 0; $section_index < $section_count; $section_index++) {
                         $section = self::deep_clone_element($prototype);
                         self::remove_all_repeatables($section['elements']);
 
-                        $chunk_count = min($limit, $item_count - ($section_index * $limit));
+                        $chunk_count = min($section_limit, $item_count - ($section_index * $section_limit));
                         $section_images = self::random_image_pool(
                             $image_pool,
                             $chunk_count
@@ -1313,10 +1330,10 @@ class WFEBPG_Generator {
 
                         $source_offset = 0;
                         for ($j = 0; $j < $chunk_count; $j++) {
-                            $item_index = ($section_index * $limit) + $j;
-                            $source_index = $chunk_count < $limit
+                            $item_index = ($section_index * $section_limit) + $j;
+                            $source_index = $chunk_count < $section_limit
                                 ? ($source_offset + $j) % $prototype_count
-                                : ($section_index * $limit + $j) % $prototype_count;
+                                : ($section_index * $section_limit + $j) % $prototype_count;
                             $source = $prototype_groups[$source_index];
 
                             foreach ($source['nodes'] as $node_info) {
@@ -1338,7 +1355,7 @@ class WFEBPG_Generator {
                             }
                         }
 
-                        if ($chunk_count < $limit) {
+                        if ($chunk_count < $section_limit) {
                             self::center_partial_repeatable_columns(
                                 $section,
                                 $prototype_groups,
@@ -1856,8 +1873,9 @@ class WFEBPG_Generator {
         return false;
     }
 
-    private static function find_repeatable_locations(&$elements, &$locations, $parent_path = [], $column_path = null, &$heading_ordinals = []) {
-        foreach ($elements as $index => &$el) {
+    private static function find_repeatable_locations(&$elements, &$locations, $parent_path = [], $column_path = null, &$heading_ordinals = [], $scope = false) {
+        foreach (self::mapping_child_keys($elements, $scope) as $index) {
+            $el =& $elements[$index];
             $current_column_path = $column_path;
             if (($el['elType'] ?? '') === 'column') {
                 $current_column_path = array_merge($parent_path, [$index]);
@@ -1909,7 +1927,8 @@ class WFEBPG_Generator {
                     $locations,
                     array_merge($parent_path, [$index]),
                     $current_column_path,
-                    $heading_ordinals
+                    $heading_ordinals,
+                    self::is_repeatable_root($el) && !WFEBPG_Template::is_repeatable($el)
                 );
             }
         }
@@ -2234,12 +2253,13 @@ class WFEBPG_Generator {
         $active_doc_paths = [];
         $active_blocks = [];
 
-        $walk = function ($nodes) use (&$walk, &$rows, &$blocks, &$excluded_indices, &$heading_cursors, &$active_doc_paths, &$active_blocks) {
-            foreach ((array) $nodes as $node) {
+        $walk = function ($nodes, $scope = false) use (&$walk, &$rows, &$blocks, &$excluded_indices, &$heading_cursors, &$active_doc_paths, &$active_blocks) {
+            foreach (self::mapping_child_keys($nodes, $scope) as $key) {
+                $node = $nodes[$key];
                 if (!is_array($node)) continue;
                 $marker = WFEBPG_Template::marker($node);
                 if ($marker['type'] === '') {
-                    if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements']);
+                    if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements'], self::is_repeatable_root($node) && !WFEBPG_Template::is_repeatable($node));
                     continue;
                 }
 
@@ -2325,7 +2345,7 @@ class WFEBPG_Generator {
                     ];
                 }
 
-                if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements']);
+                if (isset($node['elements']) && is_array($node['elements'])) $walk($node['elements'], self::is_repeatable_root($node) && !WFEBPG_Template::is_repeatable($node));
             }
         };
         $walk($elements);
@@ -2489,6 +2509,8 @@ class WFEBPG_Generator {
         // One template handles every document. The template explicitly declares
         // which elements may receive content; everything else is left alone.
         self::populate_nonrepeat($elements, $doc, $nonrepeat_exclusions);
+        // Internal FAQs must populate even when there are no external repeat groups.
+        self::populate_internal_repeaters($elements, $doc);
 
         // A Text Editor marked h3|p|repeat is an inline document stream, not a
         // repeatable Elementor section. Populate the one editor with every
@@ -2515,7 +2537,8 @@ class WFEBPG_Generator {
                 $repeatable_source,
                 absint($job['widgets_per_section'] ?? 0),
                 $image_pool,
-                $doc
+                $doc,
+                !empty($job['widgets_no_limit'])
             );
         }
 

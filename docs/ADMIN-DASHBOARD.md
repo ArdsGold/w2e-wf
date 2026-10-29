@@ -1,4 +1,4 @@
-# Admin Dashboard Guide — r2.2.7
+# Admin Dashboard Guide — r2.2.8
 
 The dashboard has five tabs. Switch tabs without reloading the page.
 
@@ -24,7 +24,7 @@ The DOCX Compatibility box reports whether the site's PHP has `ZipArchive`. If i
 
 Changes save automatically without submitting a form. Settings are shared across administrators on this site and restored when reopening or refreshing the dashboard. Wait for **Settings saved** after changing dashboard controls. A save failure is shown inline; changing a setting retries unsaved preferences.
 
-Remembered settings include Widgets per section, No limit, Parent Page, Overwrite matching existing pages, Media Library Image Pool enablement and selected images, zip-free fallback, selected saved template, saved image mappings, active tab, log level, and log search. Clearing an image selection or unchecking a checkbox saves that empty/off state. A disabled image pool retains its selection for later use and does not attach those images to new jobs.
+Remembered settings include Widgets per section, No limit, partial-row expansion, Flip Box back-title copying, Parent Page, Overwrite matching existing pages, Media Library Image Pool enablement and selected images, zip-free fallback, selected saved template, saved image mappings, active tab, log level, and log search. Clearing an image selection or unchecking a checkbox saves that empty/off state. A disabled image pool retains its selection for later use and does not attach those images to new jobs.
 
 The first administrator to load an existing preference seeds its shared value from their previous saved setting. Other administrators subsequently read the shared value. An already-open dashboard loads another administrator's updates on refresh. Notifications and temporary preview ownership remain personal. Browser file inputs must be selected again after refresh; queue and delete actions are never repeated automatically.
 
@@ -33,6 +33,14 @@ The first administrator to load an existing preference seeds its shared value fr
 **No limit** appears beside **Widgets per section**. Check it to disable and gray out the number input while keeping every widget in each repeatable group in one generated section. Separate groups keep their own sections. Uncheck it to restore the previous number. The number and checkbox both persist, including across refreshes while No limit is checked.
 
 Unlimited mode applies to structural and legacy/widget repeat groups and supports more than 100 items. With No limit off, the numeric 1–100 capacity still controls generated rows. Existing template layout rules determine how widgets render inside the section.
+
+**Expand partial rows to full width** is off by default. When enabled, a row with fewer widgets than the configured capacity shares its width equally among the remaining cards: two cards use 50% each; one uses 100%. Full rows keep the configured capacity. This applies to generated repeat columns, including legacy partial rows; existing responsive overrides remain in place.
+
+## Flip Boxes
+
+**Use heading as back title** is on by default. Turn it off to preserve the template's original back title, including an empty title. The heading still fills the front title and paragraphs still fill only the back description. Unmarked widgets remain unchanged.
+
+Both options save automatically for all administrators. Queued jobs keep the choices made when queued, even if the dashboard settings change later. Regenerate existing pages to apply new choices.
 
 ## Template Image Replacement
 

@@ -16,6 +16,9 @@ class WFEBPG_Generator {
     const QUEUE_MAX_JOBS = 3;
     const QUEUE_MAX_SECONDS = 25;
 
+    // Scoped to generate() and restored even if a job fails.
+    private static $flipbox_back_title = true;
+
     public static function clean_filename($name) {
         // Page titles should preserve special characters from the DOCX filename.
         // Only remove the file extension and normalize whitespace; do not strip
@@ -338,10 +341,10 @@ class WFEBPG_Generator {
     }
 
     private static function set_widget_title(&$settings, $value) {
-        // Elementor Flip Box repeats the same heading on both faces.
+        // Preserve the original back title when copying the heading is disabled.
         if (array_key_exists('title_text_a', $settings) || array_key_exists('title_text_b', $settings)) {
             $settings['title_text_a'] = $value;
-            $settings['title_text_b'] = $value;
+            if (self::$flipbox_back_title) $settings['title_text_b'] = $value;
             return;
         }
         foreach (['title', 'title_text', 'heading', 'text', 'ekit_icon_box_title_text', 'ekit_icon_box_badge_title', 'ekit_heading_title', 'sg_title_text', 'sg_icon_text'] as $key) {
@@ -1102,7 +1105,7 @@ class WFEBPG_Generator {
      * each Elementor repeatable region. Legacy templates may still pass one
      * flat repeatable array; modern templates pass a section-ID keyed map.
      */
-    private static function populate_repeatables(&$elements, $repeatables, $widgets_per_section = 0, $image_pool = [], $doc = null, $no_limit = false) {
+    private static function populate_repeatables(&$elements, $repeatables, $widgets_per_section = 0, $image_pool = [], $doc = null, $no_limit = false, $fill_partial = false) {
         if (!$repeatables) return;
 
         $is_collection_map = self::is_repeatable_collection_map($repeatables);
@@ -1113,7 +1116,8 @@ class WFEBPG_Generator {
             $repeatables,
             $no_limit ? 0 : $widgets_per_section,
             $image_pool,
-            $is_collection_map
+            $is_collection_map,
+            $fill_partial
         )) {
             return;
         }
@@ -1187,14 +1191,15 @@ class WFEBPG_Generator {
                     $elements,
                     $groups,
                     $items,
-                    $limit
+                    $limit,
+                    $fill_partial
                 );
             }
             $widget_collections = array_filter($repeatables, static function ($collection) {
                 return empty($collection['structural_repeat']);
             });
             if ($widget_collections) {
-                self::populate_repeatables($elements, $widget_collections, $widgets_per_section, $image_pool, $doc, $no_limit);
+                self::populate_repeatables($elements, $widget_collections, $widgets_per_section, $image_pool, $doc, $no_limit, $fill_partial);
             }
             return;
         }
@@ -1279,18 +1284,19 @@ class WFEBPG_Generator {
      * cloned sections. Modern repeatable sections consume their own scoped DOCX
      * collection; legacy templates continue to use one flat collection.
      */
-    private static function expand_repeatable_sections(&$elements, $repeatables, $widgets_per_section, $image_pool = [], $is_collection_map = false) {
+    private static function expand_repeatable_sections(&$elements, $repeatables, $widgets_per_section, $image_pool = [], $is_collection_map = false, $fill_partial = false) {
         $image_pool = self::prepare_image_pool($image_pool);
         return self::expand_repeatable_sections_recursive(
             $elements,
             $repeatables,
             $widgets_per_section,
             $image_pool,
-            $is_collection_map
+            $is_collection_map,
+            $fill_partial
         );
     }
 
-    private static function expand_repeatable_sections_recursive(&$elements, $repeatables, $limit, $image_pool = [], $is_collection_map = false) {
+    private static function expand_repeatable_sections_recursive(&$elements, $repeatables, $limit, $image_pool = [], $is_collection_map = false, $fill_partial = false) {
         $found_section = false;
         $element_count = count($elements);
 
@@ -1384,7 +1390,8 @@ class WFEBPG_Generator {
                             self::center_partial_repeatable_columns(
                                 $section,
                                 $prototype_groups,
-                                $chunk_count
+                                $chunk_count,
+                                $fill_partial
                             );
                         }
 
@@ -1404,7 +1411,8 @@ class WFEBPG_Generator {
                     $repeatables,
                     $limit,
                     $image_pool,
-                    $is_collection_map
+                    $is_collection_map,
+                    $fill_partial
                 )) {
                     $found_section = true;
                 }
@@ -1414,7 +1422,7 @@ class WFEBPG_Generator {
         return $found_section;
     }
 
-    private static function center_partial_repeatable_columns(&$section, $prototype_groups, $used_count) {
+    private static function center_partial_repeatable_columns(&$section, $prototype_groups, $used_count, $fill_partial = false) {
         $total = count($prototype_groups);
         if ($total === 0 || $used_count >= $total) return;
 
@@ -1431,7 +1439,7 @@ class WFEBPG_Generator {
 
         if (count($cards) !== $used_count) return;
 
-        $card_width = 100 / $total;
+        $card_width = 100 / ($fill_partial ? $used_count : $total);
         foreach ($cards as &$card) {
             if (!isset($card['settings']) || !is_array($card['settings'])) $card['settings'] = [];
             $card['settings']['_column_size'] = max(1, (int) round($card_width));
@@ -1991,7 +1999,7 @@ class WFEBPG_Generator {
      * equivalent of expand_repeatable_sections(), while keeping the marked
      * Column/Container as the repeat unit.
      */
-    private static function rebuild_structural_repeat_rows(&$elements, $groups, $items, $limit) {
+    private static function rebuild_structural_repeat_rows(&$elements, $groups, $items, $limit, $fill_partial = false) {
         $items = array_values((array) $items);
         if (!$groups) return;
 
@@ -2096,9 +2104,9 @@ class WFEBPG_Generator {
                 // Those prototype layout values are visual-template artifacts,
                 // not the layout for the generated collection. Once records are
                 // chunked by Widgets per section, every generated repeat column
-                // in every row must use the configured capacity width.
+                // uses capacity width, or the actual row count when expanding partial rows.
                 if (isset($row_section['elements']) && is_array($row_section['elements'])) {
-                    $width = 100 / $limit;
+                    $width = 100 / ($fill_partial ? $chunk_count : $limit);
                     foreach ($row_section['elements'] as &$child) {
                         if (($child['elType'] ?? '') !== 'column') continue;
                         if (!WFEBPG_Template::is_repeatable($child)) continue;
@@ -2112,8 +2120,7 @@ class WFEBPG_Generator {
                 }
 
                 // Preserve the existing partial-row centering behavior. The
-                // width normalization above is intentionally separate so full
-                // rows and partial rows both use the same generated card width.
+                // width normalization above also handles expanded partial rows.
                 if ($chunk_count < $limit) {
                     $row_section['settings'] = isset($row_section['settings']) && is_array($row_section['settings'])
                         ? $row_section['settings'] : [];
@@ -2489,6 +2496,16 @@ class WFEBPG_Generator {
     }
 
     public static function generate($job) {
+        $previous = self::$flipbox_back_title;
+        self::$flipbox_back_title = !array_key_exists('flipbox_back_title', $job) || !empty($job['flipbox_back_title']);
+        try {
+            return self::generate_page($job);
+        } finally {
+            self::$flipbox_back_title = $previous;
+        }
+    }
+
+    private static function generate_page($job) {
         $doc = WFEBPG_DOCX_Reader::read($job['docx'], !class_exists('ZipArchive') || !empty($job['zip_free_fallback']));
         $json = file_get_contents($job['template']);
         if ($json === false) throw new Exception('Unable to read Elementor JSON template.');
@@ -2561,7 +2578,8 @@ class WFEBPG_Generator {
                 absint($job['widgets_per_section'] ?? 0),
                 $image_pool,
                 $doc,
-                !empty($job['widgets_no_limit'])
+                !empty($job['widgets_no_limit']),
+                !empty($job['repeat_fill_partial'])
             );
         }
 

@@ -191,7 +191,8 @@ function wfebpg_admin(){
                         <p><a class="button button-link-delete" href="<?php echo esc_url($clear_templates_url); ?>" onclick="return confirm('Clear all remembered Elementor JSON templates? This does not affect templates already copied into queued jobs.');">Clear Saved JSON Templates</a></p>
                     <?php endif; ?>
                 </td></tr>
-                <tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" id="wfebpg-widgets-per-section" value="<?php echo esc_attr(wfebpg_get_setting('wfebpg_widgets_per_section',4)); ?>" min="1" max="100" style="width:80px"></label> <label><input type="checkbox" name="widgets_no_limit" id="wfebpg-widgets-no-limit" value="1" <?php checked(wfebpg_get_setting('wfebpg_widgets_no_limit',0)); ?>> No limit</label><p class="description">Sets the number of repeatable widgets per section. Check No limit to keep all widgets for each repeatable group in one section. Structural <code>data-customID|repeat</code> elements match their DOCX records; child <code>h3</code>/<code>p</code> markers fill each copy.</p></td></tr>
+                <tr><th>Repeatable Section</th><td><label>Widgets per section <input type="number" name="widgets_per_section" id="wfebpg-widgets-per-section" value="<?php echo esc_attr(wfebpg_get_setting('wfebpg_widgets_per_section',4)); ?>" min="1" max="100" style="width:80px"></label> <label><input type="checkbox" name="widgets_no_limit" id="wfebpg-widgets-no-limit" value="1" <?php checked(wfebpg_get_setting('wfebpg_widgets_no_limit',0)); ?>> No limit</label><p class="description">Sets the number of repeatable widgets per section. Check No limit to keep all widgets for each repeatable group in one section. Structural <code>data-customID|repeat</code> elements match their DOCX records; child <code>h3</code>/<code>p</code> markers fill each copy.</p><p><label><input type="checkbox" name="repeat_fill_partial" id="wfebpg-repeat-fill-partial" value="1" <?php checked(wfebpg_get_setting('wfebpg_repeat_fill_partial',0)); ?>> Expand partial rows to full width</label></p><p class="description">When fewer widgets remain than Widgets per section, share the row equally: two widgets use 50% each, one uses 100%. Leave unchecked to keep the usual card width.</p></td></tr>
+                <tr><th>Flip Boxes</th><td><label><input type="checkbox" name="flipbox_back_title" id="wfebpg-flipbox-back-title" value="1" <?php checked(wfebpg_get_setting('wfebpg_flipbox_back_title',1)); ?>> Use heading as back title</label><p class="description">The heading fills the front title and paragraphs fill the back description. Uncheck to preserve the template's original back title, including an empty title. Applies to marked Flip Boxes.</p></td></tr>
                 <tr><th>DOCX Compatibility</th><td>
                     <div class="wfebpg-zip-status <?php echo $ziparchive_available?'is-available':'is-unavailable'; ?>" role="status" aria-live="polite">
                         <strong><?php echo $ziparchive_available?'PHP ZipArchive is available':'PHP ZipArchive was not detected'; ?></strong>
@@ -867,6 +868,8 @@ function wfebpg_handle_generate(){
     $preferences=wfebpg_sanitize_settings([
         'parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,
         'widgets_no_limit'=>!empty($_POST['widgets_no_limit']),
+        'repeat_fill_partial'=>!empty($_POST['repeat_fill_partial']),
+        'flipbox_back_title'=>!empty($_POST['flipbox_back_title']),
     ]);
     foreach($preferences as $key=>$value)update_option($key,$value,false);
     $zip_free_fallback=!class_exists('ZipArchive') || !empty($_POST['zip_free_fallback']);
@@ -909,7 +912,7 @@ function wfebpg_handle_generate(){
         $original_name=(string)($original_names[$name] ?? $original_names[$source] ?? $name);
         $dest=$base.'/'.sanitize_file_name($name);
         if($has_batch){if(!copy($source,$dest))continue;}else{if(!move_uploaded_file($source,$dest))continue;}
-        WFEBPG_Generator::enqueue(['docx'=>$dest,'page_title'=>$original_name,'template'=>$template_copy,'mode'=>'auto','parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'widgets_no_limit'=>!empty($_POST['widgets_no_limit']),'image_pool_ids'=>$image_pool_ids,'zip_free_fallback'=>$zip_free_fallback]);
+        WFEBPG_Generator::enqueue(['docx'=>$dest,'page_title'=>$original_name,'template'=>$template_copy,'mode'=>'auto','parent'=>$parent,'overwrite'=>$overwrite,'widgets_per_section'=>$widgets_per_section,'widgets_no_limit'=>!empty($_POST['widgets_no_limit']),'repeat_fill_partial'=>!empty($_POST['repeat_fill_partial']),'flipbox_back_title'=>!empty($_POST['flipbox_back_title']),'image_pool_ids'=>$image_pool_ids,'zip_free_fallback'=>$zip_free_fallback]);
         $count++;
     }
     if($has_batch){foreach($sources as $source)@unlink($source);$batch_dir=wfebpg_docx_batch_dir($docx_batch);if($batch_dir){@unlink(trailingslashit($batch_dir).'.original-names.json');@rmdir($batch_dir);}}

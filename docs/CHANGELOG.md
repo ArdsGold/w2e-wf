@@ -1,5 +1,13 @@
 # Changelog
 
+## r2.2.8 - 2026-10-30
+
+- Added saved Page Generation options to preserve original Flip Box back titles and expand partial repeat rows to full width (two cards at 50% each, one at 100%). Existing behavior remains the default; jobs retain the choices made when queued. Added full-generation and shared-settings regressions.
+
+- Updated the plugin header, runtime version, and current documentation to r2.2.8.
+
+See [`RELEASE-r2.2.8.md`](RELEASE-r2.2.8.md) for defaults, upgrade behavior, and verification.
+
 ## r2.2.7 - 2026-10-30
 
 - Fixed collapsed/overlapping repeat columns at limits such as 3, 6, and 7. Generated `_column_size` values now stay integer-valued for Elementor's column classes, while `_inline_size` retains the precise percentage. Fixed legacy partial-row centering discarding its updated width settings. Added regressions against the supplied repeat-column template, preserving card order, images/styles, and centered partial rows.

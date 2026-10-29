@@ -1,8 +1,8 @@
 # Installation and Operations
 
-## Current release: r2.2.7
+## Current release: r2.2.8
 
-r2.2.7 fixes repeat-column widths and adds Process All Queue Now and Cancel Queue. Install the updated plugin files and regenerate affected pages to apply the layout correction. Keep the dashboard open while processing all jobs. Cancelling clears waiting jobs while allowing an in-progress page to finish. Existing pages, saved templates, and shared settings remain intact. See [RELEASE-r2.2.7.md](RELEASE-r2.2.7.md) for details.
+r2.2.8 adds saved Page Generation options for Flip Box back titles and partial repeat-row expansion. Back-title copying defaults to on; disable it to preserve the original template title, including an empty title. Partial-row expansion defaults to off; enable it for two remaining cards at 50% each or one at 100%. Queued jobs retain the choices made when queued. Install the updated plugin and regenerate pages to apply these options. Existing pages and saved settings remain intact. See [RELEASE-r2.2.8.md](RELEASE-r2.2.8.md) for details.
 
 ## Requirements
 

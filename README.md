@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.2.7  
+**Version:** r2.2.8  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
@@ -20,7 +20,7 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 - Reads normal DOCX Heading 1/2/3 styles and paragraphs.
 - Maps content with `data-customID` markers.
 - Shows the installed version and links to GitHub when the repository has a newer version.
-- Supports marked JKit Heading and Icon Box widgets, ElementsKit Heading titles/descriptions, and Flip Boxes with matching front/back headings and back-only paragraph content.
+- Supports marked JKit Heading and Icon Box widgets, ElementsKit Heading titles/descriptions, and Flip Boxes with optional matching front/back headings and back-only paragraph content. Disable back-title copying to preserve the original template title.
 - Supports fixed and repeatable content blocks.
 - Offers **No limit** to keep each repeatable group together in one section.
 - Automatically remembers dashboard settings across refreshes and shares them across administrators.
@@ -326,7 +326,8 @@ wolf-forge-elementor-page-generator/
 │   ├── RELEASE-r2.2.2.md
 │   ├── RELEASE-r2.2.5.md
 │   ├── RELEASE-r2.2.6.md
-│   └── RELEASE-r2.2.7.md
+│   ├── RELEASE-r2.2.7.md
+│   └── RELEASE-r2.2.8.md
 ├── includes/
 │   ├── admin-settings.php
 │   ├── version-check.php
@@ -340,6 +341,7 @@ wolf-forge-elementor-page-generator/
 │   ├── admin-settings.php
 │   ├── generation-mapping.php
 │   ├── repeatable-limit.php
+│   ├── generator-options.php
 │   ├── repeatable-layout.php
 │   ├── widget-compatibility.php
 │   ├── phone-linker.php
@@ -381,9 +383,11 @@ Changing those identifiers as part of a cosmetic rebrand would turn a safe renam
 
 The public-facing brand can change without renaming these internal identifiers.
 
-### Why the version is `r2.2.7`
+### Why the version is `r2.2.8`
 
-`r2.2.7` fixes collapsed repeat columns at limits such as three, adds one-click processing of the full queue, and adds Cancel Queue for waiting jobs. It retains the phone-link colors, GitHub status check, widget compatibility, and earlier mapping fixes. See [release notes](docs/RELEASE-r2.2.7.md).
+`r2.2.8` adds saved options for Flip Box back titles and partial repeat-row widths. It retains the repeat-column corrections, full queue processing, cancellation, phone-link colors, GitHub status check, and earlier mapping fixes. See [release notes](docs/RELEASE-r2.2.8.md).
+
+Page Generation also offers **Use heading as back title** (on by default) and **Expand partial rows to full width** (off by default). Both save automatically and are stored with each queued job. With expansion enabled, two remaining repeat columns share the row at 50% each, or one uses 100%.
 
 Install this build and regenerate affected pages to apply corrected column widths. Keep the dashboard open for Process All Queue Now. Cancellation leaves a running job and existing generated pages untouched. The GitHub version check remains informational and does not install updates automatically.
 
@@ -411,13 +415,15 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
-- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.7 admin tabs, shared preferences, and notification indicators.
-- [`docs/RELEASE-r2.2.7.md`](docs/RELEASE-r2.2.7.md) — current release scope and verification commands.
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.7 changes.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.8 admin tabs, shared preferences, and notification indicators.
+- [`docs/RELEASE-r2.2.8.md`](docs/RELEASE-r2.2.8.md) — current release scope and verification commands.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.8 changes.
 
 ### Historical documentation
 
-These files document earlier releases and are separate from the current r2.2.7 documentation:
+These files document earlier releases and are separate from the current r2.2.8 documentation:
+
+- [`docs/RELEASE-r2.2.7.md`](docs/RELEASE-r2.2.7.md) - repeat-column widths and full-queue controls.
 
 - [`docs/RELEASE-r2.2.6.md`](docs/RELEASE-r2.2.6.md) - inherited phone-link colors and GitHub version checks.
 
@@ -435,4 +441,4 @@ These files document earlier releases and are separate from the current r2.2.7 d
 
 ## Changelog
 
-See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.7 release notes.
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.8 release notes.

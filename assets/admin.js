@@ -36,6 +36,8 @@
     var fields = {
         'widgets_per_section':'#wfebpg-widgets-per-section',
         'widgets_no_limit':'#wfebpg-widgets-no-limit',
+        'repeat_fill_partial':'#wfebpg-repeat-fill-partial',
+        'flipbox_back_title':'#wfebpg-flipbox-back-title',
         'parent':'select[name="parent"]',
         'overwrite':'input[name="overwrite"]',
         'image_pool_enabled':'#wfebpg-image-pool-enabled',

@@ -40,9 +40,11 @@ $user = 1;
 check(wfebpg_get_setting('wfebpg_overwrite', 0) === 0, 'False setting was replaced by user metadata');
 
 $_POST['settings'] = ['widgets_per_section' => 9, 'widgets_no_limit' => '1', 'parent' => 12,
-    'overwrite' => '0', 'image_pool_enabled' => '0', 'log_level' => 'warning', 'log_search' => '<b>error</b>', 'active_tab' => 'logs'];
+    'repeat_fill_partial' => '1', 'flipbox_back_title' => '0', 'overwrite' => '0', 'image_pool_enabled' => '0', 'log_level' => 'warning', 'log_search' => '<b>error</b>', 'active_tab' => 'logs'];
 wfebpg_ajax_save_settings();
 check($response['success'], 'Valid settings did not save');
+check(wfebpg_get_setting('wfebpg_repeat_fill_partial') === 1, 'Partial width not saved');
+check(wfebpg_get_setting('wfebpg_flipbox_back_title',1) === 0, 'Original back-title preference not saved');
 $user = 2;
 check(wfebpg_get_setting('wfebpg_widgets_per_section') === 9, 'Number not shared');
 check(wfebpg_get_setting('wfebpg_widgets_no_limit') === 1, 'No limit not shared');

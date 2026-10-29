@@ -73,3 +73,12 @@ checkbox.change();
 assert.equal(number.disabled, false);
 assert.equal(number.value, '9', 'Checkbox changed the remembered number');
 console.log('Dashboard autosave passed: ordered patches, last change wins, failure retry, unchecked state, number restoration.');
+
+for (const [selector, key] of [['#wfebpg-repeat-fill-partial','repeat_fill_partial'], ['#wfebpg-flipbox-back-title','flipbox_back_title']]) {
+    for (const checked of [true,false]) {
+        handlers['change' + selector].call({type:'checkbox',checked});
+        const request = requests[requests.length-1];
+        assert.equal(request.data.settings[key], checked ? 1 : 0);
+        settle(request,true);
+    }
+}

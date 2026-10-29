@@ -22,6 +22,8 @@ function wfebpg_sanitize_settings($settings) {
                 $value = max(1, min(100, absint($value)));
                 break;
             case 'widgets_no_limit':
+            case 'repeat_fill_partial':
+            case 'flipbox_back_title':
             case 'overwrite':
             case 'image_pool_enabled':
                 $value = in_array($value, [true, 1, '1'], true) ? 1 : 0;

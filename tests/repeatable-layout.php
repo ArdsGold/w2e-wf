@@ -24,12 +24,13 @@ if (isset($argv[1])) {
 $original_columns = array_values(array_filter(flatten($template), static function($node){
     return ($node['elType'] ?? '') === 'column' && WFEBPG_Template::custom_id($node) === 'repeat';
 }));
+foreach ([false,true] as $fill_partial) {
 foreach ([3,6,7] as $capacity) {
-    foreach ([4,10,11] as $count) {
+    foreach ([1,2,4,10,11] as $count) {
         $elements = $template;
         $items = [];
         for ($i=1; $i<=$count; $i++) $items[] = ['heading'=>'Item '.$i,'content'=>['Body '.$i]];
-        invoke('populate_repeatables',$elements,[$key=>['target_level'=>3,'structural_repeat'=>true,'items'=>$items]],$capacity);
+        invoke('populate_repeatables',$elements,[$key=>['target_level'=>3,'structural_repeat'=>true,'items'=>$items]],$capacity,[],null,false,$fill_partial);
         $rows = [];
         foreach ($elements as $section) {
             $cards = array_values(array_filter($section['elements'] ?? [],static function($node){
@@ -43,7 +44,7 @@ foreach ([3,6,7] as $capacity) {
             check(count($cards) === min($capacity,$count-$index), 'Incorrect cards per row');
             if (count($cards)<$capacity) check(strpos($section['settings']['css_classes'] ?? '','wfebpg-partial-centered') !== false,'Partial row not centered');
             foreach ($cards as $column) {
-                assert_column_width($column,$capacity);
+                assert_column_width($column,$fill_partial ? count($cards) : $capacity);
                 $source = $original_columns[$index % count($original_columns)]['elements'][0]['settings'];
                 $index++;
                 $source['title_text_a'] = $source['title_text_b'] = 'Item '.$index;
@@ -53,6 +54,7 @@ foreach ([3,6,7] as $capacity) {
         }
         check($index === $count,'Cards missing');
     }
+}
 }
 // The legacy centering path must also avoid fractional elementor-col-* classes.
 $legacy = $original_columns[0];
@@ -65,4 +67,10 @@ for ($i=0; $i<4; $i++) $items[]=['heading'=>'Legacy '.$i,'content'=>['Legacy bod
 invoke('populate_repeatables',$elements,['legacy-row'=>['target_level'=>3,'items'=>$items]],3);
 check(count($elements) === 2 && count($elements[1]['elements']) === 1,'Legacy partial row malformed');
 assert_column_width($elements[1]['elements'][0],3);
-echo "Repeat layout passed: valid Elementor column classes, exact widths for 3/6/7 columns, centered partial rows, prototype preservation, and legacy centering.\n";
+foreach ([1,2] as $remainder) {
+    $elements = [node('legacy-row','','section',[$legacy,$legacy,$legacy])];
+    $items = array_fill(0,3+$remainder,['heading'=>'Legacy','content'=>['Body']]);
+    invoke('populate_repeatables',$elements,['legacy-row'=>['target_level'=>3,'items'=>$items]],3,[],null,false,true);
+    foreach ($elements[1]['elements'] as $column) assert_column_width($column,$remainder);
+}
+echo "Repeat layout passed: valid Elementor column classes, exact widths for 3/6/7 columns, centered partial rows, prototype preservation, optional partial-row expansion, and legacy centering.\n";

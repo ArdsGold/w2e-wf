@@ -1,5 +1,14 @@
 # Changelog
 
+## r2.2.7 - 2026-10-30
+
+- Fixed collapsed/overlapping repeat columns at limits such as 3, 6, and 7. Generated `_column_size` values now stay integer-valued for Elementor's column classes, while `_inline_size` retains the precise percentage. Fixed legacy partial-row centering discarding its updated width settings. Added regressions against the supplied repeat-column template, preserving card order, images/styles, and centered partial rows.
+- Added **Cancel Queue** beside Process All Queue Now. It clears waiting jobs, stops the current dashboard's manual batch loop, and lets an already-running job finish without deleting generated pages. Cancellation is capability- and nonce-protected, logged, and covered by worker/UI regression checks. The worker refreshes its option cache between jobs to observe cancellations made by another request.
+- Replaced repeated manual queue clicks with **Process All Queue Now**. The dashboard requests bounded batches until the queue is empty, shows handled/remaining/failed counts, waits for an active worker, and allows retry after request failures. Jobs added during generation are retained. Keep the dashboard open; leaving it ends the manual loop while ordinary WP-Cron remains available.
+- Updated the plugin header, runtime version, and current documentation to r2.2.7. Admin JavaScript cache invalidation uses the asset modification time.
+
+See [`RELEASE-r2.2.7.md`](RELEASE-r2.2.7.md) for release details and verification.
+
 ## r2.2.6 - 2026-10-30
 
 - added the installed version and GitHub version status below the dashboard title. Checks the plugin header on `ArdsGold/w2e-wf`'s `main` branch and shows a clickable repository link only when that version is newer. Results cache for six hours; failed checks retry after 15 minutes and show an unavailable status. No automatic download or installation is performed.

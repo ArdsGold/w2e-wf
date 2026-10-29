@@ -37,9 +37,15 @@ Template validation uses the same DOCX reader, template decoder, and mapping rul
 
 Jobs are stored in the `wfebpg_queue` WordPress option. A lock prevents overlapping workers. Each worker processes a bounded batch with a time limit; a queued job also schedules a near-immediate cron event. WP-Cron must be triggered by site traffic or a server cron.
 
+The dashboard's **Process All Queue Now** button sends sequential nonce- and capability-protected AJAX requests to the same bounded worker. Each result returns processed, failed, remaining, and busy values. The browser continues until the queue is empty and no worker is busy, waiting between requests when another worker holds the lock. Request failures end the loop with a retry message. The worker rereads the queue after each job so jobs enqueued during generation are retained. This manual loop requires the dashboard to remain open and does not replace WP-Cron.
+
+**Cancel Queue** clears the waiting queue through a separate protected AJAX endpoint without removing the active worker's lock or interrupting generation. The worker clears its local queue-option cache before rereading between jobs. The dashboard stops timers and uses a run identifier to ignore responses belonging to the cancelled loop. Cancellation removes queue entries only; generated pages, templates, and upload files are retained.
+
 ## Marker and storage compatibility
 
 The generator populates only marked elements. Structural `data-customID|repeat` markers identify whole Elementor items; heading/widget repeat markers and legacy marker forms remain supported.
+
+Repeat-column layout stores the rounded integer percentage in `_column_size`, which becomes an Elementor CSS class, and the exact percentage in `_inline_size`, which generates the custom width rule. Fractional values must not be stored in `_column_size`. Both structural rows and legacy centered partial rows follow this contract.
 
 Scope-sensitive traversals share `mapping_child_keys()`: within a Section/Container with one marked H1/H2 branch, that branch is visited first. The saved element arrays keep their original order. The rule applies to content mapping, repeat collections, internal FAQs, inline streams, structural location lookup, and Validator traces. Internal FAQ population runs independently of external card collections. Structural regions expand in reverse scope order to avoid renumbering later collections; remaining widget collections are populated afterward.
 

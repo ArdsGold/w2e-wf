@@ -1,4 +1,4 @@
-# Admin Dashboard Guide — r2.2.6
+# Admin Dashboard Guide — r2.2.7
 
 The dashboard has five tabs. Switch tabs without reloading the page.
 
@@ -7,6 +7,10 @@ The installed version appears below the dashboard title. It is compared with the
 ## Page Generation
 
 Upload DOCX files and select or upload an Elementor JSON template. Pages are queued for background processing. Optional controls include the image pool, parent page, and overwrite setting.
+
+In Queue, click **Process All Queue Now** once to process the waiting jobs in successive batches. Keep the dashboard open; switching its tabs is fine. Progress reports handled jobs, remaining jobs, and failures in this run. Failed jobs are logged and do not prevent later jobs from running. If another worker owns the queue lock, the dashboard waits and retries. A request failure stops the manual loop and enables the button so you can continue after checking Logs. Refresh after completion to see the updated generated-page list. Closing or refreshing the dashboard ends the manual loop; normal WP-Cron processing is unaffected.
+
+**Cancel Queue** removes all waiting jobs and stops this dashboard's manual loop. Any job already being generated finishes normally; generated pages and saved templates are not deleted. Cancellation is logged. New jobs can be queued afterward. If cancellation cannot be confirmed, the dashboard shows a retry message and enables the controls again.
 
 The right-side preview updates automatically when the template changes. It shows the Elementor structure, not a rendered screenshot. Hover over a marked element to view its `data-customID` marker. With no template selected, the preview is empty.
 
@@ -62,7 +66,7 @@ Page Generation, Template Image Replacement, and Template Validator share the se
 
 ## Troubleshooting
 
-- If a queue is stuck, choose **Process Queue Now** and check Logs.
+- If a queue is stuck, choose **Process All Queue Now**, keep the dashboard open, and check Logs.
 - If content is missing, verify its marker and run validation with the same DOCX.
 - If an image is not replaced, confirm the mapping is saved for the selected template.
 

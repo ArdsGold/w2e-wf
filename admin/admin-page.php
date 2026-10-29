@@ -14,7 +14,8 @@ add_action('admin_enqueue_scripts', function($hook){
     if (strpos($hook, 'wfebpg') === false) return;
     wp_enqueue_media();
     wp_enqueue_script('jquery');
-    wp_enqueue_script('wfebpg-admin', WFEBPG_URL.'assets/admin.js', ['jquery'], WFEBPG_VERSION, true);
+    $admin_script_file = WFEBPG_DIR.'assets/admin.js';
+    wp_enqueue_script('wfebpg-admin', WFEBPG_URL.'assets/admin.js', ['jquery'], file_exists($admin_script_file) ? filemtime($admin_script_file) : WFEBPG_VERSION, true);
 
     // Load the shared image pool in this callback's scope.
     $saved_image_ids = array_values(array_unique(array_filter(array_map(
@@ -43,6 +44,8 @@ add_action('admin_enqueue_scripts', function($hook){
 });
 add_action('admin_post_wfebpg_generate','wfebpg_handle_generate');
 add_action('admin_post_wfebpg_process_queue_now','wfebpg_process_queue_now');
+add_action('wp_ajax_wfebpg_process_queue_now','wfebpg_process_queue_now');
+add_action('wp_ajax_wfebpg_cancel_queue','wfebpg_cancel_queue');
 add_action('admin_post_wfebpg_clear_logs','wfebpg_clear_logs');
 add_action('admin_post_wfebpg_reset_generated','wfebpg_reset_generated');
 add_action('admin_post_wfebpg_trash_generated','wfebpg_trash_generated');
@@ -215,13 +218,13 @@ function wfebpg_admin(){
             <p><button type="submit" class="button button-primary button-hero">Queue Pages</button> <button type="button" class="button" id="wfebpg-stop-queueing" style="display:none;border-color:#b32d2e;color:#b32d2e">Stop Queueing</button> <span id="wfebpg-queue-status" class="description"></span></p>
         </form>
         <hr>
-        <h2>Queue</h2><p><strong><?php echo count($q);?></strong> job(s) waiting.</p>
+        <h2>Queue</h2><p><strong id="wfebpg-queue-remaining"><?php echo count($q);?></strong> job(s) waiting.</p>
         <?php $next_cron=wp_next_scheduled('wfebpg_process_queue'); if($next_cron): ?>
             <p class="description">Next WP-Cron run: <?php echo esc_html(wp_date(get_option('date_format').' '.get_option('time_format'),$next_cron)); ?></p>
         <?php else: ?>
             <p class="description">No WP-Cron worker is currently scheduled.</p>
         <?php endif; ?>
-        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_process_queue_now"><?php wp_nonce_field('wfebpg_process_queue_now');?><button class="button button-primary" <?php disabled(empty($q)); ?>>Process Queue Now</button> <span class="description">Processes one queued job immediately.</span></form>
+        <form id="wfebpg-process-all-queue" method="post" action="<?php echo esc_url(admin_url('admin-post.php'));?>" style="margin:10px 0 20px"><input type="hidden" name="action" value="wfebpg_process_queue_now"><?php wp_nonce_field('wfebpg_process_queue_now');?><button type="submit" class="button button-primary" <?php disabled(empty($q)); ?>>Process All Queue Now</button> <button type="button" id="wfebpg-cancel-queue" class="button" data-nonce="<?php echo esc_attr(wp_create_nonce('wfebpg_cancel_queue')); ?>" <?php disabled(empty($q)); ?>>Cancel Queue</button> <span id="wfebpg-process-all-status" class="description" role="status" aria-live="polite">Processes batches automatically until the queue is empty. Keep this page open. Cancel Queue removes waiting jobs; a running job will finish.</span></form>
         </div>
         <aside class="wfebpg-generation-preview wfebpg-template-preview-widget" data-template-select="#wfebpg-saved-template" data-template-upload="#wfebpg-template-upload" data-auto-preview="1" aria-labelledby="wfebpg-template-preview-heading">
             <h2 id="wfebpg-template-preview-heading">Page Template Preview</h2>
@@ -913,7 +916,26 @@ function wfebpg_handle_generate(){
     if($image_pool_ids)WFEBPG_Logger::log('Image Pool attached to queued job(s): '.count($image_pool_ids).' Media Library image(s).','info');
     WFEBPG_Logger::log('Queued '.$count.' DOCX page job(s) using automatic template mapping.','success');wp_safe_redirect(admin_url('admin.php?page=wfebpg'));exit;
 }
+function wfebpg_cancel_queue(){
+    if(!current_user_can('manage_options')||!check_ajax_referer('wfebpg_cancel_queue','nonce',false)){
+        wp_send_json_error(['message'=>'Unauthorized. Refresh the page and try again.'],403);
+        return;
+    }
+    $queue=get_option(WFEBPG_Generator::QUEUE_OPTION,[]);
+    update_option(WFEBPG_Generator::QUEUE_OPTION,[],false);
+    WFEBPG_Logger::log('Cancelled '.count($queue).' waiting queue job(s). Running jobs and generated pages were left unchanged.','info');
+    wp_send_json_success(['cancelled'=>count($queue),'remaining'=>0]);
+}
+
 function wfebpg_process_queue_now(){
+    if(wp_doing_ajax()){
+        if(!current_user_can('manage_options')||!check_ajax_referer('wfebpg_process_queue_now','_wpnonce',false)){
+            wp_send_json_error(['message'=>'Unauthorized. Refresh the page and try again.'],403);
+            return;
+        }
+        wp_send_json_success(WFEBPG_Generator::process_queue());
+        return;
+    }
     if(!current_user_can('manage_options')||!check_admin_referer('wfebpg_process_queue_now'))wp_die('Unauthorized.');
     $q=get_option('wfebpg_queue',[]);
     if(empty($q)){WFEBPG_Logger::log('Process Queue Now clicked, but the queue is empty.','info');}

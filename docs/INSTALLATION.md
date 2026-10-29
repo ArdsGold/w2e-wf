@@ -1,8 +1,8 @@
 # Installation and Operations
 
-## Current release: r2.2.6
+## Current release: r2.2.7
 
-r2.2.6 adds inherited colors for generated phone links and a GitHub version status/link in the dashboard. Install the updated plugin files and regenerate affected pages to apply the phone-link styling. Existing shared settings and stored templates are retained. GitHub checks do not install updates automatically. See [RELEASE-r2.2.6.md](RELEASE-r2.2.6.md) for details.
+r2.2.7 fixes repeat-column widths and adds Process All Queue Now and Cancel Queue. Install the updated plugin files and regenerate affected pages to apply the layout correction. Keep the dashboard open while processing all jobs. Cancelling clears waiting jobs while allowing an in-progress page to finish. Existing pages, saved templates, and shared settings remain intact. See [RELEASE-r2.2.7.md](RELEASE-r2.2.7.md) for details.
 
 ## Requirements
 
@@ -44,7 +44,7 @@ If jobs do not start automatically:
 
 1. Check whether WordPress cron is running.
 2. Open the plugin's Queue section.
-3. Use **Process Queue Now**.
+3. Use **Process All Queue Now**.
 4. Review the Logs section for errors.
 
 For large production sites, a server cron that triggers `wp-cron.php` is more reliable than visitor-triggered cron.
@@ -105,7 +105,7 @@ The generator regenerates Elementor CSS after writing page data. If styles still
 
 ### Queue remains pending
 
-Use **Process Queue Now** and inspect the logs. On a production server, verify WP-Cron is not disabled or blocked.
+Use **Process All Queue Now** and inspect the logs. On a production server, verify WP-Cron is not disabled or blocked.
 
 ## Production recommendation
 

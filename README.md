@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.2.6  
+**Version:** r2.2.7  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
@@ -155,7 +155,7 @@ It reports:
 
 Upload the DOCX files, choose the Elementor template, configure the optional image pool and parent page, then queue the pages.
 
-WP-Cron processes the queue. Choose **Process Queue Now** to run a job manually.
+WP-Cron processes the queue. Choose **Process All Queue Now** once to process successive batches until the queue is empty, keeping the dashboard open.
 
 ---
 
@@ -283,7 +283,7 @@ The worker uses:
 - A near-immediate single cron event when a job is queued.
 - The recurring minute worker as a backup.
 
-If WP-Cron is unavailable, choose **Process Queue Now** in the admin screen.
+If WP-Cron is unavailable, choose **Process All Queue Now** in the admin screen.
 
 ---
 
@@ -325,7 +325,8 @@ wolf-forge-elementor-page-generator/
 │   ├── RELEASE-r2.2.0.md
 │   ├── RELEASE-r2.2.2.md
 │   ├── RELEASE-r2.2.5.md
-│   └── RELEASE-r2.2.6.md
+│   ├── RELEASE-r2.2.6.md
+│   └── RELEASE-r2.2.7.md
 ├── includes/
 │   ├── admin-settings.php
 │   ├── version-check.php
@@ -339,8 +340,11 @@ wolf-forge-elementor-page-generator/
 │   ├── admin-settings.php
 │   ├── generation-mapping.php
 │   ├── repeatable-limit.php
+│   ├── repeatable-layout.php
 │   ├── widget-compatibility.php
 │   ├── phone-linker.php
+│   ├── queue-worker.php
+│   ├── queue-processing.js
 │   └── version-check.php
 └── README.md
 ```
@@ -377,11 +381,11 @@ Changing those identifiers as part of a cosmetic rebrand would turn a safe renam
 
 The public-facing brand can change without renaming these internal identifiers.
 
-### Why the version is `r2.2.6`
+### Why the version is `r2.2.7`
 
-`r2.2.6` adds inherited colors for generated phone links and a dashboard version check against the GitHub repository. It retains the JKit, Flip Box, and ElementsKit Heading compatibility from r2.2.5 and the earlier mapping/shared-settings fixes. See [release notes](docs/RELEASE-r2.2.6.md).
+`r2.2.7` fixes collapsed repeat columns at limits such as three, adds one-click processing of the full queue, and adds Cancel Queue for waiting jobs. It retains the phone-link colors, GitHub status check, widget compatibility, and earlier mapping fixes. See [release notes](docs/RELEASE-r2.2.7.md).
 
-The GitHub check reports newer versions and links to the repository; it does not install updates automatically. Regenerate pages to apply inherited colors to newly generated phone links. Text destinations remain limited to the supported fields in the [marker reference](docs/MARKER-SYSTEM.md).
+Install this build and regenerate affected pages to apply corrected column widths. Keep the dashboard open for Process All Queue Now. Cancellation leaves a running job and existing generated pages untouched. The GitHub version check remains informational and does not install updates automatically.
 
 ---
 
@@ -407,13 +411,15 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
-- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.6 admin tabs, shared preferences, and notification indicators.
-- [`docs/RELEASE-r2.2.6.md`](docs/RELEASE-r2.2.6.md) — current release scope and verification commands.
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.6 changes.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.7 admin tabs, shared preferences, and notification indicators.
+- [`docs/RELEASE-r2.2.7.md`](docs/RELEASE-r2.2.7.md) — current release scope and verification commands.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.7 changes.
 
 ### Historical documentation
 
-These files document earlier releases and are separate from the current r2.2.6 documentation:
+These files document earlier releases and are separate from the current r2.2.7 documentation:
+
+- [`docs/RELEASE-r2.2.6.md`](docs/RELEASE-r2.2.6.md) - inherited phone-link colors and GitHub version checks.
 
 - [`docs/RELEASE-r2.2.5.md`](docs/RELEASE-r2.2.5.md) - JKit, Flip Box, and ElementsKit Heading compatibility.
 
@@ -429,4 +435,4 @@ These files document earlier releases and are separate from the current r2.2.6 d
 
 ## Changelog
 
-See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.6 release notes.
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.7 release notes.

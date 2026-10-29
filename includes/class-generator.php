@@ -46,21 +46,25 @@ class WFEBPG_Generator {
         // enough for this single-worker lock on normal WordPress storage.
         $lock_key = self::QUEUE_LOCK_OPTION;
         $locked_at = get_option($lock_key, 0);
-        if ($locked_at && (time() - (int) $locked_at) < self::QUEUE_LOCK_SECONDS) return;
+        if ($locked_at && (time() - (int) $locked_at) < self::QUEUE_LOCK_SECONDS) {
+            return ['processed'=>0, 'failed'=>0, 'remaining'=>count(get_option(self::QUEUE_OPTION, [])), 'busy'=>true];
+        }
         if ($locked_at) delete_option($lock_key);
-        if (!add_option($lock_key, time(), '', false)) return;
+        if (!add_option($lock_key, time(), '', false)) {
+            return ['processed'=>0, 'failed'=>0, 'remaining'=>count(get_option(self::QUEUE_OPTION, [])), 'busy'=>true];
+        }
 
+        $processed = 0;
+        $failed = 0;
         try {
             $q = get_option(self::QUEUE_OPTION, []);
-            if (!$q) return;
 
             // Process a small batch per cron request. This is much faster than
-        // forcing large queues to wait one full minute per page, while the
-        // time guard keeps heavy Elementor jobs from monopolizing the request.
-        $started = microtime(true);
-        $processed = 0;
-        $max_jobs = self::QUEUE_MAX_JOBS;
-        $max_seconds = self::QUEUE_MAX_SECONDS;
+            // forcing large queues to wait one full minute per page, while the
+            // time guard keeps heavy Elementor jobs from monopolizing the request.
+            $started = microtime(true);
+            $max_jobs = self::QUEUE_MAX_JOBS;
+            $max_seconds = self::QUEUE_MAX_SECONDS;
 
             while ($q && $processed < $max_jobs && (microtime(true) - $started) < $max_seconds) {
                 $job = array_shift($q);
@@ -69,14 +73,19 @@ class WFEBPG_Generator {
                 try {
                     self::generate($job);
                 } catch (Throwable $e) {
+                    $failed++;
                     WFEBPG_Logger::log($e->getMessage(), 'error');
                 }
 
                 $processed++;
+                // Include jobs added while the previous page was being generated.
+                wp_cache_delete(self::QUEUE_OPTION, 'options');
+                $q = get_option(self::QUEUE_OPTION, []);
             }
         } finally {
             delete_option($lock_key);
         }
+        return ['processed'=>$processed, 'failed'=>$failed, 'remaining'=>count(get_option(self::QUEUE_OPTION, [])), 'busy'=>false];
     }
 
     /**
@@ -1410,7 +1419,6 @@ class WFEBPG_Generator {
         if ($total === 0 || $used_count >= $total) return;
 
         $cards = [];
-        $used_paths = [];
         for ($i = 0; $i < $used_count; $i++) {
             $source = $prototype_groups[$i] ?? null;
             if (!$source) return;
@@ -1418,7 +1426,6 @@ class WFEBPG_Generator {
             if (!is_array($path) || count($path) !== 1) return;
             $index = (int) $path[0];
             if (!isset($section['elements'][$index]) || !is_array($section['elements'][$index])) return;
-            $used_paths[$index] = true;
             $cards[] = $section['elements'][$index];
         }
 
@@ -1427,20 +1434,14 @@ class WFEBPG_Generator {
         $card_width = 100 / $total;
         foreach ($cards as &$card) {
             if (!isset($card['settings']) || !is_array($card['settings'])) $card['settings'] = [];
-            $card['settings']['_column_size'] = $card_width;
-            $card['settings']['_inline_size'] = null;
+            $card['settings']['_column_size'] = max(1, (int) round($card_width));
+            $card['settings']['_inline_size'] = $card_width;
         }
         unset($card);
 
         // Remove unused visual columns. The CSS class below centers the
         // remaining cards as one group inside the section container.
-        $remaining = [];
-        foreach ($section['elements'] as $index => $column) {
-            if (isset($used_paths[$index])) $remaining[] = $column;
-        }
-        if (count($remaining) !== $used_count) return;
-
-        $section['elements'] = $remaining;
+        $section['elements'] = $cards;
         $settings = isset($section['settings']) && is_array($section['settings'])
             ? $section['settings']
             : [];
@@ -2102,8 +2103,10 @@ class WFEBPG_Generator {
                         if (($child['elType'] ?? '') !== 'column') continue;
                         if (!WFEBPG_Template::is_repeatable($child)) continue;
                         $child['settings'] = isset($child['settings']) && is_array($child['settings']) ? $child['settings'] : [];
-                        $child['settings']['_column_size'] = $width;
-                        $child['settings']['_inline_size'] = null;
+                        // _column_size becomes an elementor-col-* class; fractions
+                        // have no matching base rule. Keep precision in custom width.
+                        $child['settings']['_column_size'] = max(1, (int) round($width));
+                        $child['settings']['_inline_size'] = $width;
                     }
                     unset($child);
                 }

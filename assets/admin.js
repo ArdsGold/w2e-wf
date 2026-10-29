@@ -1039,3 +1039,77 @@ jQuery(function($){
     $('#wfebpg-log-search').on('input',filterLogs);
     filterLogs();
 })(jQuery);
+
+// Process all queued pages through sequential, bounded worker requests.
+(function($){
+    var $form = $('#wfebpg-process-all-queue');
+    if (!$form.length || !window.WFEBPG_Admin) return;
+    var $button = $form.find('button[type="submit"]');
+    var $cancel = $('#wfebpg-cancel-queue');
+    var $status = $('#wfebpg-process-all-status');
+    var running = false, cancelling = false, handled = 0, failed = 0, timer = null, runId = 0;
+    function stop(message, empty){
+        running = false;
+        $button.prop('disabled', !!empty).text('Process All Queue Now');
+        $cancel.prop('disabled', !!empty);
+        $status.text(message);
+    }
+    function next(id){
+        if (!running || id !== runId) return;
+        $.post(WFEBPG_Admin.ajaxUrl, $form.serialize()).done(function(response){
+            if (!running || id !== runId) return;
+            if (!response || !response.success || !response.data) {
+                stop(response && response.data && response.data.message ? response.data.message : 'Unable to process the queue. Check Logs and try again.', false);
+                return;
+            }
+            var result = response.data;
+            handled += Number(result.processed) || 0;
+            failed += Number(result.failed) || 0;
+            var remaining = Number(result.remaining) || 0;
+            $('#wfebpg-queue-remaining').text(remaining);
+            if (!result.busy && remaining === 0) {
+                stop('Queue is empty. Handled ' + handled + ' job(s); ' + failed + ' failed. Refresh to review generated pages and Logs.', true);
+                return;
+            }
+            $status.text(result.busy ? 'Another worker is processing the queue. Waiting...' : 'Handled ' + handled + ' job(s); ' + remaining + ' remaining; ' + failed + ' failed.');
+            timer = window.setTimeout(function(){next(id);}, result.busy ? 1000 : 250);
+        }).fail(function(){
+            if (!running || id !== runId) return;
+            stop('Queue request failed. Check Logs, then click Process All Queue Now to continue.', false);
+        });
+    }
+    $form.on('submit', function(event){
+        event.preventDefault();
+        if (running || cancelling) return;
+        running = true;
+        handled = 0;
+        failed = 0;
+        $button.prop('disabled', true).text('Processing all...');
+        $status.text('Processing queue. Keep this page open.');
+        $cancel.prop('disabled', false);
+        next(++runId);
+    });
+    $cancel.on('click', function(){
+        if (cancelling) return;
+        cancelling = true;
+        running = false;
+        runId++;
+        window.clearTimeout(timer);
+        $button.prop('disabled', true).text('Process All Queue Now');
+        $cancel.prop('disabled', true);
+        $status.text('Cancelling waiting jobs... A running job will finish.');
+        $.post(WFEBPG_Admin.ajaxUrl, {
+            action:'wfebpg_cancel_queue', nonce:$cancel.attr('data-nonce')
+        }).done(function(response){
+            if (!response || !response.success || !response.data) {
+                stop(response && response.data && response.data.message ? response.data.message : 'Cancellation could not be confirmed. Refresh or try Cancel Queue again.', false);
+                return;
+            }
+            var remaining = Number(response.data.remaining) || 0;
+            $('#wfebpg-queue-remaining').text(remaining);
+            stop('Cancelled ' + (Number(response.data.cancelled) || 0) + ' waiting job(s). A running job may finish. Generated pages were not deleted.', remaining === 0);
+        }).fail(function(){
+            stop('Cancellation could not be confirmed. Refresh or try Cancel Queue again.', false);
+        }).always(function(){cancelling = false;});
+    });
+})(jQuery);

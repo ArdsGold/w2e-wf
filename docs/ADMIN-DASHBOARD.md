@@ -1,6 +1,8 @@
-# Admin Dashboard Guide — r2.2.5
+# Admin Dashboard Guide — r2.2.6
 
 The dashboard has five tabs. Switch tabs without reloading the page.
+
+The installed version appears below the dashboard title. It is compared with the plugin header on the GitHub repository's `main` branch. A newer repository version shows **Update available** with a link to the repository in a new tab. Matching versions show **Up to date with GitHub**; a newer local version is identified as ahead of GitHub. Successful checks cache for six hours. Failed checks show an unavailable status and cache for 15 minutes; the dashboard remains usable. This only checks versions and does not install updates.
 
 ## Page Generation
 

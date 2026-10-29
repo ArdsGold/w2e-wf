@@ -1,8 +1,8 @@
 # Installation and Operations
 
-## Current release: r2.2.5
+## Current release: r2.2.6
 
-r2.2.5 adds marked JKit Heading, JKit Icon Box, and Flip Box compatibility. Install the updated plugin files and regenerate affected pages to apply the new mappings. Existing shared settings and stored templates are retained. See [RELEASE-r2.2.5.md](RELEASE-r2.2.5.md) for the mapping rules and checks.
+r2.2.6 adds inherited colors for generated phone links and a GitHub version status/link in the dashboard. Install the updated plugin files and regenerate affected pages to apply the phone-link styling. Existing shared settings and stored templates are retained. GitHub checks do not install updates automatically. See [RELEASE-r2.2.6.md](RELEASE-r2.2.6.md) for details.
 
 ## Requirements
 

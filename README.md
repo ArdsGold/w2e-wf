@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.2.5  
+**Version:** r2.2.6  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
@@ -19,6 +19,7 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 - Generates WordPress pages from one reusable Elementor JSON template.
 - Reads normal DOCX Heading 1/2/3 styles and paragraphs.
 - Maps content with `data-customID` markers.
+- Shows the installed version and links to GitHub when the repository has a newer version.
 - Supports marked JKit Heading and Icon Box widgets, ElementsKit Heading titles/descriptions, and Flip Boxes with matching front/back headings and back-only paragraph content.
 - Supports fixed and repeatable content blocks.
 - Offers **No limit** to keep each repeatable group together in one section.
@@ -323,9 +324,11 @@ wolf-forge-elementor-page-generator/
 │   ├── RELEASE-r2.1.0.md
 │   ├── RELEASE-r2.2.0.md
 │   ├── RELEASE-r2.2.2.md
-│   └── RELEASE-r2.2.5.md
+│   ├── RELEASE-r2.2.5.md
+│   └── RELEASE-r2.2.6.md
 ├── includes/
 │   ├── admin-settings.php
+│   ├── version-check.php
 │   ├── class-docx-reader.php
 │   ├── class-generator.php
 │   ├── class-logger.php
@@ -336,7 +339,9 @@ wolf-forge-elementor-page-generator/
 │   ├── admin-settings.php
 │   ├── generation-mapping.php
 │   ├── repeatable-limit.php
-│   └── widget-compatibility.php
+│   ├── widget-compatibility.php
+│   ├── phone-linker.php
+│   └── version-check.php
 └── README.md
 ```
 
@@ -372,11 +377,11 @@ Changing those identifiers as part of a cosmetic rebrand would turn a safe renam
 
 The public-facing brand can change without renaming these internal identifiers.
 
-### Why the version is `r2.2.5`
+### Why the version is `r2.2.6`
 
-`r2.2.5` adds marked JKit Heading, JKit Icon Box, and Elementor Flip Box compatibility. Flip Boxes receive the same heading on both faces and paragraph content only in the back description. It includes the No limit, shared-settings, paragraph, FAQ, and repeat-group fixes previously released in r2.2.2. See [release notes](docs/RELEASE-r2.2.5.md).
+`r2.2.6` adds inherited colors for generated phone links and a dashboard version check against the GitHub repository. It retains the JKit, Flip Box, and ElementsKit Heading compatibility from r2.2.5 and the earlier mapping/shared-settings fixes. See [release notes](docs/RELEASE-r2.2.6.md).
 
-Text destinations use the supported fields documented in the [marker reference](docs/MARKER-SYSTEM.md). Automatic discovery of every widget's text controls is not part of this release. Regenerate pages to apply the compatibility additions.
+The GitHub check reports newer versions and links to the repository; it does not install updates automatically. Regenerate pages to apply inherited colors to newly generated phone links. Text destinations remain limited to the supported fields in the [marker reference](docs/MARKER-SYSTEM.md).
 
 ---
 
@@ -402,13 +407,15 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
-- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.5 admin tabs, shared preferences, and notification indicators.
-- [`docs/RELEASE-r2.2.5.md`](docs/RELEASE-r2.2.5.md) — current release scope and verification commands.
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.5 changes.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.6 admin tabs, shared preferences, and notification indicators.
+- [`docs/RELEASE-r2.2.6.md`](docs/RELEASE-r2.2.6.md) — current release scope and verification commands.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.6 changes.
 
 ### Historical documentation
 
-These files document earlier releases and are separate from the current r2.2.5 documentation:
+These files document earlier releases and are separate from the current r2.2.6 documentation:
+
+- [`docs/RELEASE-r2.2.5.md`](docs/RELEASE-r2.2.5.md) - JKit, Flip Box, and ElementsKit Heading compatibility.
 
 - [`docs/RELEASE-r2.2.2.md`](docs/RELEASE-r2.2.2.md) - shared settings, No limit, paragraph/FAQ, and repeat-group fixes.
 
@@ -422,4 +429,4 @@ These files document earlier releases and are separate from the current r2.2.5 d
 
 ## Changelog
 
-See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.5 release notes.
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.6 release notes.

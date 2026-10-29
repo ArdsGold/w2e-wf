@@ -143,6 +143,7 @@ function wfebpg_admin(){
     ?>
 <div class="wrap wfebpg-admin" data-server-tab="<?php echo esc_attr($active_tab); ?>" data-template-image-statuses="<?php echo esc_attr(wp_json_encode($template_image_statuses)); ?>" data-template-validator-statuses="<?php echo esc_attr(wp_json_encode($template_validator_statuses)); ?>">
     <h1>Wolf Forge Elementor Page Generator</h1>
+    <?php wfebpg_render_version_status(WFEBPG_VERSION); ?>
     <p class="description">Settings save automatically and are shared across administrators. Uploaded files must be selected again after refreshing.</p>
     <p id="wfebpg-settings-status" class="description" role="status" aria-live="polite"></p>
     <?php if(isset($_GET['wfebpg_reset'])): ?><div class="notice notice-success is-dismissible"><p>Generated-page To-Do table cleared. No WordPress pages were deleted and logs were left unchanged.</p></div><?php endif; ?>

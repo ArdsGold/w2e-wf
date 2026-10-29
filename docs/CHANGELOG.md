@@ -1,5 +1,13 @@
 # Changelog
 
+## r2.2.6 - 2026-10-30
+
+- added the installed version and GitHub version status below the dashboard title. Checks the plugin header on `ArdsGold/w2e-wf`'s `main` branch and shows a clickable repository link only when that version is newer. Results cache for six hours; failed checks retry after 15 minutes and show an unavailable status. No automatic download or installation is performed.
+- newly generated phone links inherit their surrounding text color, including on hover, using an inline color override. Phone destinations and displayed numbers remain unchanged; existing anchors retain their original styling. Regenerate pages to update automatically linked numbers. Added standalone phone-link regression checks.
+- Updated the plugin header, runtime version, and current documentation to r2.2.6. Automatic installation remains unimplemented; GitHub checks only provide status and a repository link.
+
+See [`RELEASE-r2.2.6.md`](RELEASE-r2.2.6.md) for release details and checks.
+
 ## r2.2.5 - 2026-10-21
 
 - Fixed the final ElementsKit Heading in the Sud Slingers template: `h2` now fills `ekit_heading_title`, and `p` fills the rich-text Title Description (`ekit_heading_extra_title`). Focused title, subtitle, visibility, and styling remain unchanged. Preview and compatibility tests include this widget; all 12 marked supported widgets in the template pass.

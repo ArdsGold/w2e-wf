@@ -1,5 +1,13 @@
 # Changelog
 
+## r2.2.9 - 2026-10-30
+
+- Check GitHub on every dashboard open or refresh instead of reusing six-hour version results. Requests bypass upstream caching, and failed checks retry on the next load without claiming the installation is up to date. The displayed installed version continues to identify the local plugin files.
+
+- Updated the plugin header, runtime version, and current documentation to r2.2.9.
+
+See [`RELEASE-r2.2.9.md`](RELEASE-r2.2.9.md) for upgrade behavior and verification.
+
 ## r2.2.8 - 2026-10-30
 
 - Added saved Page Generation options to preserve original Flip Box back titles and expand partial repeat rows to full width (two cards at 50% each, one at 100%). Existing behavior remains the default; jobs retain the choices made when queued. Added full-generation and shared-settings regressions.

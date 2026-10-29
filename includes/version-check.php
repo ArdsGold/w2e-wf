@@ -3,12 +3,10 @@ if (!defined('ABSPATH')) exit;
 
 /** Compare against the plugin header on the repository's main branch. */
 function wfebpg_repository_version() {
-    $cached = get_transient('wfebpg_repository_version');
-    if (is_array($cached) && isset($cached['version'])) return $cached['version'];
-
     $response = wp_remote_get(
-        'https://raw.githubusercontent.com/ArdsGold/w2e-wf/main/wolf-forge-elementor-page-generator.php',
-        ['timeout'=>3, 'redirection'=>0, 'limit_response_size'=>16384]
+        // Refresh on every dashboard load, including GitHub's upstream cache.
+        'https://raw.githubusercontent.com/ArdsGold/w2e-wf/main/wolf-forge-elementor-page-generator.php?check=' . wp_generate_uuid4(),
+        ['timeout'=>3, 'redirection'=>0, 'limit_response_size'=>16384, 'headers'=>['Cache-Control'=>'no-cache']]
     );
     $version = '';
     if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
@@ -17,8 +15,6 @@ function wfebpg_repository_version() {
             $version = $match[1];
         }
     }
-    // Cache failures too, so unavailable GitHub access does not delay every visit.
-    set_transient('wfebpg_repository_version', ['version'=>$version], $version !== '' ? 6 * HOUR_IN_SECONDS : 15 * MINUTE_IN_SECONDS);
     return $version;
 }
 

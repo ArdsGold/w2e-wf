@@ -1,8 +1,8 @@
 # Installation and Operations
 
-## Current release: r2.2.8
+## Current release: r2.2.9
 
-r2.2.8 adds saved Page Generation options for Flip Box back titles and partial repeat-row expansion. Back-title copying defaults to on; disable it to preserve the original template title, including an empty title. Partial-row expansion defaults to off; enable it for two remaining cards at 50% each or one at 100%. Queued jobs retain the choices made when queued. Install the updated plugin and regenerate pages to apply these options. Existing pages and saved settings remain intact. See [RELEASE-r2.2.8.md](RELEASE-r2.2.8.md) for details.
+r2.2.9 checks GitHub whenever the plugin dashboard is opened or refreshed, bypassing saved version results and upstream caching. Failed checks retry on the next load and show an unavailable status. Install the updated plugin files to receive this behavior; the displayed installed version changes only after upgrading. Existing generated pages and settings remain intact, and no page regeneration is needed for this dashboard change. See [RELEASE-r2.2.9.md](RELEASE-r2.2.9.md) for details.
 
 ## Requirements
 

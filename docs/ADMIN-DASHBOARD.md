@@ -1,4 +1,4 @@
-# Admin Dashboard Guide — r2.2.2
+# Admin Dashboard Guide — r2.2.5
 
 The dashboard has five tabs. Switch tabs without reloading the page.
 

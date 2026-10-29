@@ -329,7 +329,13 @@ class WFEBPG_Generator {
     }
 
     private static function set_widget_title(&$settings, $value) {
-        foreach (['title', 'title_text', 'heading', 'text', 'ekit_icon_box_title_text', 'ekit_icon_box_badge_title'] as $key) {
+        // Elementor Flip Box repeats the same heading on both faces.
+        if (array_key_exists('title_text_a', $settings) || array_key_exists('title_text_b', $settings)) {
+            $settings['title_text_a'] = $value;
+            $settings['title_text_b'] = $value;
+            return;
+        }
+        foreach (['title', 'title_text', 'heading', 'text', 'ekit_icon_box_title_text', 'ekit_icon_box_badge_title', 'ekit_heading_title', 'sg_title_text', 'sg_icon_text'] as $key) {
             if (array_key_exists($key, $settings)) {
                 $settings[$key] = $value;
                 return;
@@ -349,6 +355,16 @@ class WFEBPG_Generator {
         $html = wpautop($value);
         if (array_key_exists('editor', $settings)) {
             $settings['editor'] = $html;
+        } elseif (array_key_exists('ekit_heading_extra_title', $settings)) {
+            $settings['ekit_heading_extra_title'] = $html;
+        } elseif (array_key_exists('description_text_b', $settings)
+            || array_key_exists('title_text_a', $settings) || array_key_exists('title_text_b', $settings)) {
+            // Front description and button text remain part of the template.
+            $settings['description_text_b'] = wp_strip_all_tags($value);
+        } elseif (array_key_exists('sg_icon_description', $settings)) {
+            $settings['sg_icon_description'] = wp_strip_all_tags($value);
+        } elseif (array_key_exists('sg_description', $settings)) {
+            $settings['sg_description'] = wp_strip_all_tags($value);
         } elseif (array_key_exists('description_text', $settings)) {
             $settings['description_text'] = wp_strip_all_tags($value);
         } elseif (array_key_exists('ekit_icon_box_description_text', $settings)) {
@@ -1755,6 +1771,8 @@ class WFEBPG_Generator {
             $settings['title_text'] = $title;
         } elseif (array_key_exists('title', $settings)) {
             $settings['title'] = $title;
+        } else {
+            self::set_widget_title($settings, $title);
         }
 
         if (array_key_exists('description_text', $settings)) {
@@ -1767,6 +1785,8 @@ class WFEBPG_Generator {
             $settings['content'] = wpautop($content);
         } elseif (array_key_exists('html', $settings)) {
             $settings['html'] = wpautop($content);
+        } else {
+            self::set_widget_text($settings, $content, false);
         }
 
         $widget['settings'] = $settings;

@@ -23,11 +23,26 @@ data-customID|p
 
 The first token is the content source. Additional tokens are behavior/content flags.
 
-### Text destinations and section scope in r2.2.2
+### Text destinations and section scope
 
 Markers choose DOCX content; the mapper writes it into supported text fields on the marked widget. Heading destinations include `title`, `title_text`, `heading`, `text`, supported ElementsKit title fields, and the first supported Icon List text item. Paragraph destinations include `editor`, `description_text`, `ekit_icon_box_description_text`, `text`, `content`, and `html`. A paragraph-only marker can also fill a Heading widget's `title` field. Text Editor combined markers render heading and paragraph content together; a combined marker does not replace a title-only widget's heading with its body.
 
 This is a known-field mapper. It does not automatically discover every third-party widget's text controls or populate all string settings. Keep using supported fields and validate the template with its DOCX.
+
+JKit and Flip Box compatibility added in r2.2.5:
+
+| Widget | Heading marker destination | Paragraph marker destination |
+|---|---|---|
+| JKit Heading | Main title (`sg_title_text`) | Description (`sg_description`) |
+| JKit Icon Box | Title (`sg_icon_text`) | Description (`sg_icon_description`) |
+| Elementor Flip Box | Both front and back titles (`title_text_a`, `title_text_b`) | Back description only (`description_text_b`) |
+| ElementsKit Heading | Heading title (`ekit_heading_title`) | Rich-text Title Description (`ekit_heading_extra_title`) |
+
+Use `data-customID|h3|p` for an item heading and its body, or add `|repeat` when that item should repeat. The fields also work inside structural repeat elements and with legacy repeat markers. An `h2` marker on JKit Heading fills only its main title; add `|p` when the description should receive the associated paragraphs. A paragraph-only marker fills the supported description without changing the titles.
+
+JKit Heading prefix, focused text, subtitle, shadow text, and display controls stay as configured in Elementor. JKit Icon Box badges and buttons stay unchanged. Flip Box front descriptions and buttons stay unchanged. A disabled description display control must be enabled in Elementor to show its populated text. Only marked widgets are filled; this support does not add markers to the uploaded JSON or change unmarked elements.
+
+For ElementsKit Heading, use `data-customID|h2|p` to fill its heading and Title Description from the same DOCX H2 block. Paragraph formatting is retained in the description; focused text, subtitles, visibility controls, and styles remain as configured in Elementor.
 
 Within a Section or Container, if exactly one non-repeatable `h1` or `h2` marker exists, the mapper visits the child branch containing that marker first to establish the DOCX scope. This allows an FAQ Accordion to appear before its H2 in the exported JSON. It changes traversal order only, preserving the saved layout. With zero or multiple such headings, the original branch order is used. Sections map by DOCX heading hierarchy and occurrence order, not by matching heading text such as “FAQs.”
 

@@ -1,5 +1,9 @@
 # Installation and Operations
 
+## Current release: r2.2.5
+
+r2.2.5 adds marked JKit Heading, JKit Icon Box, and Flip Box compatibility. Install the updated plugin files and regenerate affected pages to apply the new mappings. Existing shared settings and stored templates are retained. See [RELEASE-r2.2.5.md](RELEASE-r2.2.5.md) for the mapping rules and checks.
+
 ## Requirements
 
 - WordPress 6.0 or newer.

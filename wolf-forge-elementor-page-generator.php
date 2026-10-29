@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Wolf Forge Elementor Page Generator
  * Description: Generate Elementor pages from DOCX files and JSON templates with marker-based paragraph and FAQ mapping, optional unlimited repeatable sections, automatically saved shared settings, background processing, template validation and previews, Media Library image tools, phone links, and logs.
- * Version: r2.2.2
+ * Version: r2.2.5
  * Author: Macky Villafuerte, Arden Guinto
  * Text Domain: wolf-forge-elementor-page-generator
  * Requires at least: 6.0
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WFEBPG_VERSION', 'r2.2.2');
+define('WFEBPG_VERSION', 'r2.2.5');
 define('WFEBPG_DIR', plugin_dir_path(__FILE__));
 define('WFEBPG_URL', plugin_dir_url(__FILE__));
 

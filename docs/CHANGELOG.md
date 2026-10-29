@@ -1,5 +1,13 @@
 # Changelog
 
+## r2.2.5 - 2026-10-21
+
+- Fixed the final ElementsKit Heading in the Sud Slingers template: `h2` now fills `ekit_heading_title`, and `p` fills the rich-text Title Description (`ekit_heading_extra_title`). Focused title, subtitle, visibility, and styling remain unchanged. Preview and compatibility tests include this widget; all 12 marked supported widgets in the template pass.
+- Added marked JKit Heading (`sg_title_text`/`sg_description`), JKit Icon Box (`sg_icon_text`/`sg_icon_description`), and Elementor Flip Box support. Flip Boxes receive the same heading on both faces and paragraph content only in the back description. Extra JKit heading text, badges, buttons, front descriptions, and unmarked widgets remain unchanged. Added template-preview fields and normal/repeat regression checks, including all 11 compatible marked widgets in the supplied Sud Slingers template.
+- Updated the plugin header, runtime version, and current documentation to r2.2.5. The r2.2.2 release notes retain their previous scope.
+
+See [`RELEASE-r2.2.5.md`](RELEASE-r2.2.5.md) for mapping rules and verification.
+
 ## r2.2.2 — 2026-10-20
 
 - Consolidated the current fixes and documentation under r2.2.2. Documented supported text destinations and section-heading-first behavior; retained the existing mapper without introducing universal widget-control discovery.

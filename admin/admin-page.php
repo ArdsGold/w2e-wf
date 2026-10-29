@@ -390,7 +390,7 @@ function wfebpg_build_template_preview_nodes($elements,&$node_count=0,$depth=0){
         $type=$widget_type!==''?$widget_type:$element_type;
         $label=ucwords(str_replace(['_','-'],' ',$type));
         $text='';
-        foreach(['title','editor','text','description','button_text','testimonial_content','caption'] as $key){
+        foreach(['title','title_text','ekit_heading_title','sg_title_text','sg_icon_text','title_text_a','title_text_b','editor','ekit_heading_extra_title','text','description','sg_icon_description','sg_description','description_text_b','button_text','testimonial_content','caption'] as $key){
             if(!isset($settings[$key])||!is_scalar($settings[$key]))continue;
             $candidate=trim(wp_strip_all_tags((string)$settings[$key]));
             if($candidate!==''){$text=$candidate;break;}

@@ -1,8 +1,8 @@
 # Installation and Operations
 
-## Current release: r2.2.9
+## Current release: r2.3.0
 
-r2.2.9 checks GitHub whenever the plugin dashboard is opened or refreshed, bypassing saved version results and upstream caching. Failed checks retry on the next load and show an unavailable status. Install the updated plugin files to receive this behavior; the displayed installed version changes only after upgrading. Existing generated pages and settings remain intact, and no page regeneration is needed for this dashboard change. See [RELEASE-r2.2.9.md](RELEASE-r2.2.9.md) for details.
+r2.3.0 adds matching-title page links, underlined generated phone links, and the custom dashboard icon. Add `|link` to a supported title/link widget, such as `data-customID|h3|link`, to match published pages on the same site. Missing or duplicate matches stay blank; pending links retry after later page generations. Install the updated plugin files, then regenerate existing pages to apply new markers or phone-link styling. Saved preferences and existing templates remain compatible. See [RELEASE-r2.3.0.md](RELEASE-r2.3.0.md) for details.
 
 ## Requirements
 

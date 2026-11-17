@@ -1,6 +1,6 @@
 # Wolf Forge Elementor Page Generator
 
-**Version:** r2.2.9  
+**Version:** r2.3.0  
 **Authors:** Macky Villafuerte, Arden Guinto  
 **WordPress:** 6.0+  
 **PHP:** 7.4+  
@@ -329,7 +329,8 @@ wolf-forge-elementor-page-generator/
 │   ├── RELEASE-r2.2.6.md
 │   ├── RELEASE-r2.2.7.md
 │   ├── RELEASE-r2.2.8.md
-│   └── RELEASE-r2.2.9.md
+│   ├── RELEASE-r2.2.9.md
+│   └── RELEASE-r2.3.0.md
 ├── includes/
 │   ├── admin-settings.php
 │   ├── version-check.php
@@ -387,9 +388,9 @@ Changing those identifiers as part of a cosmetic rebrand would turn a safe renam
 
 The public-facing brand can change without renaming these internal identifiers.
 
-### Why the version is `r2.2.9`
+### Why the version is `r2.3.0`
 
-`r2.2.9` checks GitHub on every dashboard open or refresh, replacing the previous six-hour version cache. Failed checks retry on the next load. It retains the saved Flip Box and partial-row options, repeat-column corrections, and full queue controls. See [release notes](docs/RELEASE-r2.2.9.md).
+`r2.3.0` adds matching-title page links using `|link`, underlined generated phone links, and a custom dashboard menu icon. Pending links can resolve when their destination is generated later in the queue. Duplicate-title matches stay blank and are logged. It retains fresh GitHub version checks, saved Flip Box and partial-row options, and full queue controls. See [release notes](docs/RELEASE-r2.3.0.md).
 
 Page Generation also offers **Use heading as back title** (on by default) and **Expand partial rows to full width** (off by default). Both save automatically and are stored with each queued job. With expansion enabled, two remaining repeat columns share the row at 50% each, or one uses 100%.
 
@@ -419,13 +420,15 @@ When extending the plugin:
 - [`docs/MARKER-SYSTEM.md`](docs/MARKER-SYSTEM.md) — complete marker and mapping reference.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code structure and data flow.
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — installation, upgrade, and troubleshooting.
-- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.2.9 admin tabs, shared preferences, and notification indicators.
-- [`docs/RELEASE-r2.2.9.md`](docs/RELEASE-r2.2.9.md) — current release scope and verification commands.
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.2.9 changes.
+- [`docs/ADMIN-DASHBOARD.md`](docs/ADMIN-DASHBOARD.md) — r2.3.0 admin tabs, shared preferences, and notification indicators.
+- [`docs/RELEASE-r2.3.0.md`](docs/RELEASE-r2.3.0.md) — current release scope and verification commands.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — r2.3.0 changes.
 
 ### Historical documentation
 
-These files document earlier releases and are separate from the current r2.2.9 documentation:
+These files document earlier releases and are separate from the current r2.3.0 documentation:
+
+- [`docs/RELEASE-r2.2.9.md`](docs/RELEASE-r2.2.9.md) - fresh GitHub version checks on dashboard load.
 
 - [`docs/RELEASE-r2.2.8.md`](docs/RELEASE-r2.2.8.md) - saved Flip Box back-title and partial-row width options.
 
@@ -447,4 +450,4 @@ These files document earlier releases and are separate from the current r2.2.9 d
 
 ## Changelog
 
-See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.2.9 release notes.
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the current r2.3.0 release notes.

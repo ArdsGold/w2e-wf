@@ -1,12 +1,16 @@
 # Changelog
 
-## Unreleased
+## r2.3.0 - 2026-11-18
 
 - Use the supplied `pluginIcon.png` for the plugin's dashboard menu icon, sized to fit the WordPress sidebar on all admin screens. Its URL includes the file modification time so replacing the image loads the new icon after a refresh.
 
 - Added `|link` for supported widgets with title and native link fields. It matches published page titles on the same site, ignoring case and extra whitespace. Missing/ambiguous matches remain blank; duplicates are logged, manual/dynamic links are preserved, and self-links are excluded. Pending links are retried after later page generations, including across queue batches. Added validator counts/warnings and standalone widget/queue regressions.
 
 - Underline phone links created during page generation while preserving their inherited text color and telephone destinations. Regenerate existing pages to apply the styling. Existing template anchors remain unchanged.
+
+- Updated the plugin header, runtime version, and current documentation to r2.3.0. Local browser testing verified native widget links, blank fallbacks, and later-page backfilling with zero failed test jobs.
+
+See [`RELEASE-r2.3.0.md`](RELEASE-r2.3.0.md) for marker usage, upgrade behavior, and verification.
 
 ## r2.2.9 - 2026-10-30
 

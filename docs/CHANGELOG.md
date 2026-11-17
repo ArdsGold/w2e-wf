@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Use the supplied `pluginIcon.png` for the plugin's dashboard menu icon, sized to fit the WordPress sidebar on all admin screens. Its URL includes the file modification time so replacing the image loads the new icon after a refresh.
+
+- Added `|link` for supported widgets with title and native link fields. It matches published page titles on the same site, ignoring case and extra whitespace. Missing/ambiguous matches remain blank; duplicates are logged, manual/dynamic links are preserved, and self-links are excluded. Pending links are retried after later page generations, including across queue batches. Added validator counts/warnings and standalone widget/queue regressions.
+
+- Underline phone links created during page generation while preserving their inherited text color and telephone destinations. Regenerate existing pages to apply the styling. Existing template anchors remain unchanged.
+
 ## r2.2.9 - 2026-10-30
 
 - Check GitHub on every dashboard open or refresh instead of reusing six-hour version results. Requests bypass upstream caching, and failed checks retry on the next load without claiming the installation is up to date. The displayed installed version continues to identify the local plugin files.

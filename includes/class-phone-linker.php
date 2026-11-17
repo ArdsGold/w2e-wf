@@ -83,7 +83,7 @@ class WFEBPG_Phone_Linker {
                 return $display;
             }
 
-            return '<a href="tel:' . esc_attr($phone) . '" style="color: inherit !important;">' . $display . '</a>';
+            return '<a href="tel:' . esc_attr($phone) . '" style="color: inherit !important; text-decoration: underline !important;">' . $display . '</a>';
         }, $text);
 
         return $text;

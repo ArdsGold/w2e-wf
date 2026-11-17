@@ -46,6 +46,38 @@ For ElementsKit Heading, use `data-customID|h2|p` to fill its heading and Title 
 
 Within a Section or Container, if exactly one non-repeatable `h1` or `h2` marker exists, the mapper visits the child branch containing that marker first to establish the DOCX scope. This allows an FAQ Accordion to appear before its H2 in the exported JSON. It changes traversal order only, preserving the saved layout. With zero or multiple such headings, the original branch order is used. Sections map by DOCX heading hierarchy and occurrence order, not by matching heading text such as “FAQs.”
 
+### Link a widget title to a matching page
+
+Add `|link` to a supported widget's content marker:
+
+```text
+data-customID|h3|link
+data-customID|h3|p|link
+data-customID|h3|p|repeat|link
+```
+
+The heading/body mapping runs first. The plugin then searches **published pages on this WordPress site** for a title matching the widget's final title text. Matching ignores capitalization (including Unicode letters), extra spaces, HTML tags, and HTML entity encoding. Otherwise it requires the same text: punctuation, accents, singular/plural forms, and word order are not approximated. It never matches drafts, private pages, posts, or the page containing the widget.
+
+Use `data-customID|link` by itself to link an existing template title without replacing that title with DOCX content. To repeat a whole card, keep `data-customID|repeat` on its parent and put `data-customID|h3|link` on the title widget inside it. Link markers belong on widgets, not on structural containers.
+
+| Widget | Matching title field | Native link field |
+|---|---|---|
+| Elementor Heading | `title` | `link` |
+| Elementor Icon Box / Image Box | `title_text` | `link` |
+| Elementor Button | `text` | `link` |
+| Elementor Flip Box | Front title `title_text_a` | `link` |
+| ElementsKit Heading | `ekit_heading_title` | `ekit_heading_link` |
+| ElementsKit Icon Box | `ekit_icon_box_title_text` | Global link, or button link when its button is enabled |
+| JKit Heading | `sg_title_text` | `sg_title_link` |
+| JKit Icon Box | `sg_icon_text` | `sg_readmore_globallink` |
+| Elementor Icon List | Each item's `text` | Each item's `link` |
+
+Only opted-in widgets receive automatic links. Existing nonblank URLs and dynamic links take precedence; `#` is treated as an empty placeholder. Missing or ambiguous matches leave the link blank. Duplicate-title matches are logged with candidate page IDs rather than choosing an arbitrary destination. Existing link options such as new-tab/nofollow settings remain as configured. JKit/ElementsKit Icon Box global-link switches are enabled when a match is written; Flip Box **Apply Link On** stays as configured in the template.
+
+Pages with unresolved links are remembered in post metadata. After each page generation, the plugin retries earlier published pages with pending links, including across separate queue batches or requests. This allows a target generated later in the queue to fill an earlier widget's blank link. Existing manual edits and removed markers are respected on retry. The retry updates Elementor data, clears its cached element HTML, and regenerates that page's CSS. Unmatched links remain blank after the queue finishes. Matching is performed during generation/retries; this feature does not continuously synchronize links when pages are renamed or deleted.
+
+The Template Validator counts `link` markers and warns about unsupported widget types. Destination availability is resolved during generation, using the final populated title.
+
 ### Repeat marker
 
 The short form is:

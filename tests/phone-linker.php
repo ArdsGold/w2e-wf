@@ -14,7 +14,8 @@ foreach (['501-542-2531','(501) 542-2531','5015422531','+1 501 542 2531'] as $nu
     check($links->length === 1, 'Expected exactly one phone link');
     $link = $links->item(0);
     check($link->getAttribute('href') === 'tel:+15015422531', 'Phone destination changed');
-    check($link->getAttribute('style') === 'color: inherit !important;', 'Phone color does not inherit');
+    check(strpos($link->getAttribute('style'), 'color: inherit !important;') !== false, 'Phone color does not inherit');
+    check(strpos($link->getAttribute('style'), 'text-decoration: underline !important;') !== false, 'Phone link not underlined');
     check($link->textContent === $number, 'Displayed number changed');
     check($link->parentNode->getAttribute('style') === 'color: #c02030', 'Surrounding color changed');
     check(WFEBPG_Phone_Linker::html($result) === $result, 'Second pass modified existing link');
@@ -27,4 +28,4 @@ foreach ([
     '<style>.phone-5015422531 {color:red}</style>',
 ] as $source) check(WFEBPG_Phone_Linker::html($source) === $source, 'Existing markup changed');
 
-echo "Phone links passed: inherited color, tel destinations, displayed numbers, idempotence, and unchanged existing markup.\n";
+echo "Phone links passed: inherited color, underlines, tel destinations, displayed numbers, idempotence, and unchanged existing markup.\n";

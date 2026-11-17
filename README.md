@@ -19,6 +19,7 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 - Generates WordPress pages from one reusable Elementor JSON template.
 - Reads normal DOCX Heading 1/2/3 styles and paragraphs.
 - Maps content with `data-customID` markers.
+- Supports `|link` on supported title/link widgets to find matching published pages, including pages generated later in the queue.
 - Shows the installed version and links to GitHub when the repository has a newer version.
 - Supports marked JKit Heading and Icon Box widgets, ElementsKit Heading titles/descriptions, and Flip Boxes with optional matching front/back headings and back-only paragraph content. Disable back-title copying to preserve the original template title.
 - Supports fixed and repeatable content blocks.
@@ -335,6 +336,7 @@ wolf-forge-elementor-page-generator/
 │   ├── class-docx-reader.php
 │   ├── class-generator.php
 │   ├── class-logger.php
+│   ├── class-title-linker.php
 │   ├── class-phone-linker.php
 │   └── class-template.php
 ├── tests/
@@ -345,6 +347,7 @@ wolf-forge-elementor-page-generator/
 │   ├── generator-options.php
 │   ├── repeatable-layout.php
 │   ├── widget-compatibility.php
+│   ├── title-linker.php
 │   ├── phone-linker.php
 │   ├── queue-worker.php
 │   ├── queue-processing.js

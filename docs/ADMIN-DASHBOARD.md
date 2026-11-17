@@ -36,6 +36,12 @@ Unlimited mode applies to structural and legacy/widget repeat groups and support
 
 **Expand partial rows to full width** is off by default. When enabled, a row with fewer widgets than the configured capacity shares its width equally among the remaining cards: two cards use 50% each; one uses 100%. Full rows keep the configured capacity. This applies to generated repeat columns, including legacy partial rows; existing responsive overrides remain in place.
 
+## Automatic page links
+
+In the Elementor template, add `data-customID|h3|link` to a supported title/link widget to fill its title from the DOCX and link to a published page with the same title. Use `data-customID|link` to keep and match the existing template title. Capitalization and extra spaces are ignored. Missing or duplicate-title matches leave the link blank; duplicates appear in Logs. Existing URLs and dynamic links are preserved (`#` counts as a blank placeholder).
+
+Pages generated later in the queue can fill earlier unresolved links automatically after generation completes. Link options remain in the template; no dashboard setting is required. See [Marker System](MARKER-SYSTEM.md#link-a-widget-title-to-a-matching-page) for supported widgets and repeat examples.
+
 ## Flip Boxes
 
 **Use heading as back title** is on by default. Turn it off to preserve the template's original back title, including an empty title. The heading still fills the front title and paragraphs still fill only the back description. Unmarked widgets remain unchanged.

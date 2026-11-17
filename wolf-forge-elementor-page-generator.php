@@ -18,6 +18,7 @@ define('WFEBPG_URL', plugin_dir_url(__FILE__));
 
 require_once WFEBPG_DIR . 'includes/class-docx-reader.php';
 require_once WFEBPG_DIR . 'includes/class-template.php';
+require_once WFEBPG_DIR . 'includes/class-title-linker.php';
 require_once WFEBPG_DIR . 'includes/class-generator.php';
 require_once WFEBPG_DIR . 'includes/class-phone-linker.php';
 require_once WFEBPG_DIR . 'includes/class-logger.php';

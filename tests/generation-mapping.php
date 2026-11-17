@@ -16,6 +16,8 @@ function wp_insert_post($post, $error) { return 123; }
 function is_wp_error($value) { return false; }
 function update_post_meta($id, $key, $value) { $GLOBALS['saved_meta'][$key] = $value; }
 function clean_post_cache($id) {}
+function delete_post_meta($id, $key) {}
+function get_posts($args) { return []; }
 function wp_cache_delete($id, $group) {}
 function get_option($key, $default = false) { return $default; }
 function update_option($key, $value, $autoload = null) {}
@@ -24,6 +26,7 @@ class WFEBPG_Logger { public static function log($message, $level = 'info') {} }
 require __DIR__.'/../includes/class-template.php';
 require __DIR__.'/../includes/class-docx-reader.php';
 require __DIR__.'/../includes/class-phone-linker.php';
+require __DIR__.'/../includes/class-title-linker.php';
 require __DIR__.'/../includes/class-generator.php';
 function check($condition, $message) { if (!$condition) throw new RuntimeException($message); }
 function invoke($name, &$elements, ...$args) {

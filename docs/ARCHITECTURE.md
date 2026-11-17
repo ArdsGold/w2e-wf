@@ -58,3 +58,11 @@ The `WFEBPG` prefix is part of the stored-data and WordPress integration contrac
 The JavaScript autosave queue serializes dashboard patches, shows save status, and retains failed changes for retry. Active tabs use saved server state instead of sessionStorage. The image-pool toggle is restored independently of selected image IDs. Temporary previews and notification acknowledgments continue using user metadata.
 
 Queued jobs capture their generation settings at submission, including `widgets_no_limit`; later dashboard edits do not alter queued jobs. Unlimited generation uses the scoped item count as the section capacity in the structural path and disables splitting per collection in the widget path.
+
+## Matching-title page links
+
+`includes/class-title-linker.php` resolves the `link` marker/flag after content mapping and post creation, before Elementor data is saved. It uses native widget URL controls and searches only the current site's published page titles. It reads IDs/titles without loading all page content, compares normalized visible text with Unicode-aware case-insensitive equality, excludes the source page, and keeps manual/dynamic URLs intact.
+
+Unresolved sources carry `_wfebpg_title_links_pending` post metadata. Every completed generation retries those published source pages using their current `_elementor_data`. Successful changes invalidate `_elementor_element_cache`, clear the post cache, and regenerate the affected page's Elementor CSS. No additional queue jobs or dashboard settings are needed. Pending sources survive separate worker requests. Resolved links are not continuously synchronized with later target renames or deletions.
+
+Run `php tests/title-linker.php` to verify matching boundaries, native fields, repeated markers, validation, and forward references across worker batches using WordPress/HTTP-free stubs.

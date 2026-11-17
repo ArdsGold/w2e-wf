@@ -8,7 +8,11 @@ add_action('admin_init', function(){
     }
 });
 add_action('admin_menu', function(){
-    add_menu_page('Wolf Forge Page Generator', 'Wolf Forge Page Generator','manage_options','wfebpg','wfebpg_admin','dashicons-layout',58);
+    $icon_version = file_exists(WFEBPG_DIR.'pluginIcon.png') ? filemtime(WFEBPG_DIR.'pluginIcon.png') : WFEBPG_VERSION;
+    add_menu_page('Wolf Forge Page Generator', 'Wolf Forge Page Generator','manage_options','wfebpg','wfebpg_admin',WFEBPG_URL.'pluginIcon.png?ver='.$icon_version,58);
+});
+add_action('admin_enqueue_scripts', function(){
+    wp_add_inline_style('admin-menu', '#adminmenu #toplevel_page_wfebpg .wp-menu-image img{width:20px;height:20px;object-fit:contain;padding-top:7px;}');
 });
 add_action('admin_enqueue_scripts', function($hook){
     if (strpos($hook, 'wfebpg') === false) return;

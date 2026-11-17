@@ -2244,6 +2244,7 @@ class WFEBPG_Generator {
             self::P_ID => 0,
             self::REPEAT_ID => 0,
             self::STEP_ID => 0,
+            'link' => 0,
         ];
 
         self::walk_mutate($elements, function (&$el) use (&$counts) {
@@ -2254,6 +2255,7 @@ class WFEBPG_Generator {
             if (in_array('repeatable', $marker['flags'], true)) {
                 $counts[self::REPEAT_ID]++;
             }
+            if ($marker['type'] !== 'link' && in_array('link', $marker['flags'], true)) $counts['link']++;
         });
 
         return $counts;
@@ -2408,6 +2410,12 @@ class WFEBPG_Generator {
             'errors' => [],
             'mapping_debug' => [],
         ];
+
+        self::walk_mutate($elements, static function (&$node) use (&$result) {
+            if (WFEBPG_Title_Linker::is_marked($node) && !WFEBPG_Title_Linker::supports($node)) {
+                $result['warnings'][] = 'Title link marker is unsupported on widget ' . ($node['widgetType'] ?? $node['elType'] ?? 'unknown') . '. Use a supported title/link widget.';
+            }
+        });
 
         if ($doc !== null) {
             $result['doc'] = [
@@ -2614,6 +2622,7 @@ class WFEBPG_Generator {
 
         if (is_wp_error($id)) throw new Exception('Page creation failed: ' . $id->get_error_message());
 
+        $title_links_pending = WFEBPG_Title_Linker::apply($elements, $id);
         $elementor_json = WFEBPG_Template::encode($elements);
 
         // Keep the generated page in Elementor's full content area while
@@ -2671,6 +2680,11 @@ class WFEBPG_Generator {
             'plugin_created' => $was_overwrite ? 0 : 1,
         ]);
         update_option('wfebpg_created_pages', array_slice($created_pages, 0, 300), false);
+
+        WFEBPG_Title_Linker::remember_pending($id, $title_links_pending);
+        WFEBPG_Title_Linker::resolve_pending($id, static function ($source_id) {
+            self::regenerate_elementor_css($source_id);
+        });
 
         WFEBPG_Logger::log('Generated page #' . $id . ' — ' . $title, 'success');
         return $id;

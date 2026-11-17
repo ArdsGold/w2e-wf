@@ -36,6 +36,8 @@ function wp_json_encode($value, $flags = 0) { return json_encode($value, $flags)
 function wp_slash($value) { return $value; }
 function update_post_meta($id, $key, $value) {}
 function clean_post_cache($id) {}
+function delete_post_meta($id, $key) {}
+function get_posts($args) { return []; }
 function wp_cache_delete($id, $group) { if ($id === 'wfebpg_queue' && $group === 'options') $GLOBALS['queue_cache'] = null; }
 function current_time($format) { return '2026-10-30 00:00:00'; }
 function wp_doing_ajax() { return true; }
@@ -66,6 +68,7 @@ class WFEBPG_DOCX_Reader {
     }
 }
 require __DIR__.'/../includes/class-template.php';
+require __DIR__.'/../includes/class-title-linker.php';
 require __DIR__.'/../includes/class-generator.php';
 require __DIR__.'/../admin/admin-page.php';
 function check($condition, $message) { if (!$condition) throw new RuntimeException($message); }

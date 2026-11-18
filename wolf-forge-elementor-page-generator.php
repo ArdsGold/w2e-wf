@@ -18,6 +18,7 @@ define('WFEBPG_URL', plugin_dir_url(__FILE__));
 
 require_once WFEBPG_DIR . 'includes/class-docx-reader.php';
 require_once WFEBPG_DIR . 'includes/class-template.php';
+require_once WFEBPG_DIR . 'includes/elementor-markers.php';
 require_once WFEBPG_DIR . 'includes/class-title-linker.php';
 require_once WFEBPG_DIR . 'includes/class-generator.php';
 require_once WFEBPG_DIR . 'includes/class-phone-linker.php';
@@ -25,6 +26,9 @@ require_once WFEBPG_DIR . 'includes/class-logger.php';
 require_once WFEBPG_DIR . 'includes/admin-settings.php';
 require_once WFEBPG_DIR . 'includes/version-check.php';
 require_once WFEBPG_DIR . 'admin/admin-page.php';
+
+add_action('wp_after_insert_post', ['WFEBPG_Title_Linker', 'page_saved'], 20, 4);
+add_action('deleted_post', ['WFEBPG_Title_Linker', 'page_deleted'], 20, 2);
 
 register_activation_hook(__FILE__, function () {
     if (!wp_next_scheduled('wfebpg_process_queue')) {

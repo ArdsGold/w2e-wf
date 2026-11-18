@@ -1,5 +1,5 @@
 <?php
-// Run: php tests/title-linker.php (no WordPress, Elementor, or network required).
+// Run: php tests/title-linker.php [attribute|field|css] (no WordPress, Elementor, or network required).
 define('ABSPATH', __DIR__);
 define('OBJECT', 'OBJECT');
 $options = $meta = $posts = $logs = $invalidated = [];
@@ -35,14 +35,16 @@ function delete_post_meta($id,$key) {
 function clean_post_cache($id) {}
 function wp_cache_delete($id,$group) {}
 function current_time($format) { return '2026-11-18 00:00:00'; }
-function get_permalink($id) { return 'https://example.test/page/'.$id.'/'; }
+function get_post($id) { return $GLOBALS['posts'][$id] ?? null; }
+function get_permalink($id) { return $GLOBALS['permalinks'][$id] ?? 'https://example.test/page/'.$id.'/'; }
 function get_posts($args) {
-    check($args['post_type'] === 'page' && $args['post_status'] === 'publish','Pending lookup includes non-public pages');
+    check($args['post_type'] === 'page','Link lookup includes non-pages');
     return array_values(array_filter(array_keys($GLOBALS['posts']),static function($id) use ($args) {
         $post=$GLOBALS['posts'][$id];
-        return $post->post_type === 'page' && $post->post_status === 'publish'
-            && !in_array($id,$args['post__not_in'],true)
-            && get_post_meta($id,$args['meta_key'],true) === $args['meta_value'];
+        return $post->post_type === 'page' && ($args['post_status'] === 'any' || $post->post_status === 'publish')
+            && !in_array($id,$args['post__not_in'] ?? [],true)
+            && (isset($args['meta_value']) ? get_post_meta($id,$args['meta_key'],true) === $args['meta_value']
+                : get_post_meta($id,$args['meta_key'],true) !== '');
     }));
 }
 class WFEBPG_Logger { public static function log($message,$level='info') { $GLOBALS['logs'][]=[$message,$level]; } }
@@ -69,7 +71,11 @@ require __DIR__.'/../includes/class-title-linker.php';
 require __DIR__.'/../includes/class-generator.php';
 function check($condition,$message) { if (!$condition) throw new RuntimeException($message); }
 function widget($type,$settings,$marker='link') {
-    return ['id'=>wp_generate_uuid4(),'elType'=>'widget','widgetType'=>$type,'settings'=>$settings+['_attributes'=>'data-customID|'.$marker],'elements'=>[]];
+    $source = $GLOBALS['argv'][1] ?? 'attribute';
+    if ($source === 'field') $settings['wfebpg_marker'] = $marker;
+    elseif ($source === 'css') $settings['_css_classes'] = 'keep-style wf-' . str_replace('|',' wf-',$marker);
+    else $settings['_attributes'] = 'data-customID|' . $marker;
+    return ['id'=>wp_generate_uuid4(),'elType'=>'widget','widgetType'=>$type,'settings'=>$settings,'elements'=>[]];
 }
 function page($id,$title,$status='publish',$type='page') {
     $GLOBALS['posts'][$id]=(object)['ID'=>$id,'post_title'=>$title,'post_status'=>$status,'post_type'=>$type];

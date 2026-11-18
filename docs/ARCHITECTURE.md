@@ -63,6 +63,26 @@ Queued jobs capture their generation settings at submission, including `widgets_
 
 `includes/class-title-linker.php` resolves the `link` marker/flag after content mapping and post creation, before Elementor data is saved. It uses native widget URL controls and searches only the current site's published page titles. It reads IDs/titles without loading all page content, compares normalized visible text with Unicode-aware case-insensitive equality, excludes the source page, and keeps manual/dynamic URLs intact.
 
-Unresolved sources carry `_wfebpg_title_links_pending` post metadata. Every completed generation retries those published source pages using their current `_elementor_data`. Successful changes invalidate `_elementor_element_cache`, clear the post cache, and regenerate the affected page's Elementor CSS. No additional queue jobs or dashboard settings are needed. Pending sources survive separate worker requests. Resolved links are not continuously synchronized with later target renames or deletions.
+Unresolved sources carry `_wfebpg_title_links_pending` post metadata. Every completed generation retries those published source pages using their current `_elementor_data`. Successful changes invalidate `_elementor_element_cache`, clear the post cache, and regenerate the affected page's Elementor CSS. Pending sources survive separate worker requests.
+
+`_wfebpg_title_link_targets` stores target ID, last generated URL, and source title, keyed by widget ID/link field or Icon List item ID. Refresh changes a URL only while it still equals the last generated value. Dynamic links, manual overrides, and removed markers release ownership. Regeneration clears old tracking before processing fresh template data. `wp_after_insert_post` and `deleted_post` coalesce slug/parent/status changes and deletions into one shutdown refresh of all tracked source pages, including links to descendants. Nonpublished targets retain their ID with a blank URL. The nonce-protected administrator refresh action queries pages with `_elementor_data`, including manually created pages, fills blank marked links, and adopts verified legacy title/permalink pairs. Automatic refreshes query `_wfebpg_title_link_targets` instead, so tracked manual pages follow future target moves too. Unchanged Elementor arrays are not re-encoded, and manual pages never receive `_wfebpg_generated`; uncertain URLs remain untouched and logged. `tests/title-link-refresh.php` covers stable targets, hierarchy changes, overrides, publication changes, legacy adoption, and hook coalescing.
 
 Run `php tests/title-linker.php` to verify matching boundaries, native fields, repeated markers, validation, and forward references across worker batches using WordPress/HTTP-free stubs.
+
+## Elementor Free marker inputs
+
+`includes/elementor-markers.php` uses Elementor core's `elementor/element/after_section_end` hook to add a text control (`wfebpg_marker`) in an Advanced > Wolf Forge section after the native advanced layout controls. It supports widget common controls plus container, section, and column stacks, without Pro APIs. Elementor persists the setting in the exported element data.
+
+`WFEBPG_Template` gives a nonblank dedicated setting priority over legacy marker attributes, then reads recognized `wf-` tokens from widget `_css_classes` or structural `css_classes`. Heading/content tokens take precedence over modifiers regardless of CSS class order. All sources feed the existing marker normalization; generation, validation, previews, and title matching therefore share the behavior. `clear_marker()` removes consumed inline-repeat markers from every source without discarding unrelated attributes or styling classes.
+
+Verification: `php tests/marker-inputs.php`, plus `php tests/title-linker.php field` and `php tests/title-linker.php css` for native widget fields and forward references across queue batches.
+
+## Container rows and Nested Accordion
+
+Structural repeats prefer the existing legacy Section row owner; pure-Container documents fall back to the nearest containing Container outside the marked card itself. Rebuilding that row preserves native container styling while applying collection capacity. Nested Accordion is classified as an internal repeater, so its FAQ records are excluded from external card collections. Its `items` hold question titles; cloned child containers hold the paired answer Text Editors.
+
+Runtime validation checks the availability of native Container and Nested Accordion types through Elementor's managers. Generation performs the same preflight before creating/updating a WordPress page. This prevents disabled Elementor features from producing a misleading successful, empty page. `tests/container-and-nested-accordion.php` covers mixed service/FAQ scopes and accepts optional real template/DOCX paths.
+
+## Native telephone-link preservation
+
+Before processing an element's string settings, the generator asks `WFEBPG_Phone_Linker::preserve_widget()`. Native URL controls containing `tel:` trigger a skip for Button widgets. Other widgets are skipped only when a supported number in their text normalizes to the same destination. Native URL strings are excluded from HTML conversion, and existing HTML anchors remain protected by the original text-node linker. Child elements are evaluated independently. `tests/phone-widget-preservation.php` covers native fields, matching/nonmatching numbers, extensions, button behavior, mixed linked/unlinked text, and recursion.

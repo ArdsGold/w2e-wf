@@ -4,13 +4,36 @@
 
 The marker system is the contract between an Elementor JSON template and the DOCX parser.
 
-> **If an Elementor element has no `data-customID` marker, the generator does not populate it.**
+> **If an Elementor element has no recognized Wolf Forge marker, the generator does not populate it.**
 
 Unmarked elements may still be cloned when they live inside a marked repeatable parent. Their content is otherwise left untouched.
 
 ## Marker syntax
 
-Use Elementor **Advanced → Attributes / Custom Attributes**.
+Three equivalent inputs are supported. Elementor Free can use the first two:
+
+1. **Advanced > Wolf Forge > Wolf Forge Marker**: enter `h3|link`, `h3|p`, `repeat`, or another existing marker value. Do not add the `data-customID|` prefix. The field appears on widgets, containers, sections, and columns while this plugin is active.
+2. **Advanced > CSS Classes**: enter prefixed classes such as `wf-h3 wf-link`. Add them alongside your styling classes, without dots or pipes.
+3. **Advanced > Attributes / Custom Attributes**: existing `data-customID|h3|link` syntax remains supported where Attributes is available.
+
+| Purpose | Wolf Forge Marker field | CSS Classes | Custom Attributes |
+|---|---|---|---|
+| H1 / H2 / H3 | `h1` / `h2` / `h3` | `wf-h1` / `wf-h2` / `wf-h3` | `data-customID|h1` / `h2` / `h3` |
+| Paragraph | `p` | `wf-p` | `data-customID|p` |
+| Heading and body | `h3|p` | `wf-h3 wf-p` | `data-customID|h3|p` |
+| Heading and page link | `h3|link` | `wf-h3 wf-link` | `data-customID|h3|link` |
+| Existing-title link | `link` | `wf-link` | `data-customID|link` |
+| Whole repeat item | `repeat` | `wf-repeat` | `data-customID|repeat` |
+| Repeated heading and body | `h3|p|repeat` | `wf-h3 wf-p wf-repeat` | `data-customID|h3|p|repeat` |
+| Step number | `step` | `wf-step` | `data-customID|step` |
+
+All existing marker types and aliases remain accepted, including `repeatable`, `repeatableItem`, and the legacy heading names. CSS equivalents add `wf-` to each token, such as `wf-repeatableItem`. CSS class order does not affect a heading combined with paragraph, repeat, or link modifiers. Use one primary content type per element. Recognized `wf-` tokens are reserved for markers; other styling classes (including unrelated `wf-` names) stay unchanged.
+
+If an element has multiple inputs, a **nonblank dedicated field wins**, then a legacy customID/attribute marker, then CSS-class markers. These sources are not merged. Blank dedicated fields allow fallback. Prefer one input per element to avoid conflicts.
+
+The field and CSS classes persist in Elementor settings and exported JSON. The parser reads `_css_classes` for widgets and `css_classes` for structural elements. Clearing a consumed inline-repeat marker removes its dedicated field, recognized CSS marker tokens, and attribute marker while retaining unrelated styling classes/attributes.
+
+The attribute examples below also work through the equivalent field values or CSS classes above.
 
 ### Basic content markers
 
@@ -74,7 +97,11 @@ Use `data-customID|link` by itself to link an existing template title without re
 
 Only opted-in widgets receive automatic links. Existing nonblank URLs and dynamic links take precedence; `#` is treated as an empty placeholder. Missing or ambiguous matches leave the link blank. Duplicate-title matches are logged with candidate page IDs rather than choosing an arbitrary destination. Existing link options such as new-tab/nofollow settings remain as configured. JKit/ElementsKit Icon Box global-link switches are enabled when a match is written; Flip Box **Apply Link On** stays as configured in the template.
 
-Pages with unresolved links are remembered in post metadata. After each page generation, the plugin retries earlier published pages with pending links, including across separate queue batches or requests. This allows a target generated later in the queue to fill an earlier widget's blank link. Existing manual edits and removed markers are respected on retry. The retry updates Elementor data, clears its cached element HTML, and regenerates that page's CSS. Unmatched links remain blank after the queue finishes. Matching is performed during generation/retries; this feature does not continuously synchronize links when pages are renamed or deleted.
+Pages with unresolved links are remembered in post metadata. After each page generation, the plugin retries earlier published pages with pending links, including across separate queue batches or requests. This allows a target generated later in the queue to fill an earlier widget's blank link. Existing manual edits and removed markers are respected on retry. The retry updates Elementor data, clears its cached element HTML, and regenerates that page's CSS. Unmatched links remain blank after the queue finishes.
+
+Newly generated links also remember their target page ID. When a page's slug, parent, or publication status changes through WordPress, tracked links refresh at the end of that request. A parent move refreshes links to its descendants as well. Renaming the target title keeps the same target; editing the widget URL releases tracking. Unpublished/deleted targets have blank links until that same target becomes published again. Removed markers stop synchronization.
+
+Use **Page Generation > Refresh generated links** to scan all Elementor pages, including manually created pages. It fills blank links on supported widgets marked with `link`, refreshes tracked links, and adopts older marked links whose existing URL exactly equals the permalink of a unique matching published title. Older links have no ownership record: custom, already outdated, or ambiguous URLs stay unchanged and are reported in Logs. Clear the marked widget's link field and refresh again to establish a new title match, or regenerate plugin-created pages from a template with blank link fields. This explicit action can adopt a manually entered URL if it exactly matches that verified title/permalink pair; ordinary automatic refreshes never adopt untracked populated links.
 
 The Template Validator counts `link` markers and warns about unsupported widget types. Destination availability is resolved during generation, using the final populated title.
 
@@ -135,6 +162,14 @@ For each matching record in the DOCX scope, the generator:
 This works for cards, service boxes, process steps, benefits, and other layouts.
 
 The **Widgets per section** setting controls the number of generated cards per row. In r2.2.2, checking **No limit** grays out this input and keeps all cards for each repeatable group in one section; unchecking restores the saved numeric limit. Both controls save automatically and are shared across administrators. If the template has prototypes in multiple rows, all prototypes are reused in order. Generated repeat Columns use the configured row width; an incomplete final row is centered. A scope with no matching records produces no repeat items.
+
+Pure-Container templates use the repeat card's containing Container as their row owner when no legacy Section exists. The capacity limits cloned rows while preserving native card widths, gaps, responsive settings, and non-repeat content. Inside each repeat card, use an H3 marker on its heading and a `p` marker on the description; marking the description H3 fills it with heading content instead of the paragraph.
+
+## Nested Accordion FAQs
+
+For Elementor's native **Nested Accordion**, use `h3|p|repeat` in the dedicated field, `wf-h3 wf-p wf-repeat` in CSS Classes, or the equivalent custom attribute. The generator keeps a single accordion widget. It populates each item title and clones the matching child content container, filling its first Text Editor with that question's answer. Template item/panel styling is preserved and cloned element IDs are unique. If there is no Text Editor, an answer Text Editor is added to the cloned panel. FAQ records remain independent of service-card repeats.
+
+Container templates require **Container** support in Elementor Settings > Features; Nested Accordion also requires **Nested Elements**. These are Elementor Free features. The validator and generator report an error if the required native element/widget is unavailable. After enabling features on an existing site, clear/rebuild the affected page's Elementor cache and CSS before reviewing its frontend.
 
 ## Widget-level repeatable Text Editor
 

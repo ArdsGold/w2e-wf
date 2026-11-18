@@ -4,6 +4,7 @@ if (!defined('ABSPATH')) exit;
 /** Resolve opt-in widget links against published page titles on this site. */
 class WFEBPG_Title_Linker {
     const PENDING_META = '_wfebpg_title_links_pending';
+    const TARGETS_META = '_wfebpg_title_link_targets';
 
     private const WIDGET_FIELDS = [
         'heading' => ['title', 'link'],
@@ -33,10 +34,13 @@ class WFEBPG_Title_Linker {
     }
 
     /** Return whether any supported, blank links still need a matching page. */
-    public static function apply(&$elements, $source_id, &$pages = null) {
+    public static function apply(&$elements, $source_id, &$pages = null, $adopt_legacy = false) {
         $pending = false;
         $matches = [];
-        $walk = function (&$nodes) use (&$walk, $source_id, &$pages, &$pending, &$matches) {
+        $saved = get_post_meta($source_id, self::TARGETS_META, true);
+        $saved = is_array($saved) ? $saved : [];
+        $targets = [];
+        $walk = function (&$nodes) use (&$walk, $source_id, &$pages, &$pending, &$matches, $saved, &$targets, $adopt_legacy) {
             foreach ($nodes as &$node) {
                 $type = $node['widgetType'] ?? '';
                 if (self::is_marked($node)) {
@@ -47,7 +51,8 @@ class WFEBPG_Title_Linker {
                         if ($type === 'elementskit-icon-box' && ($settings['ekit_icon_box_enable_btn'] ?? '') === 'yes') {
                             $link_key = 'ekit_icon_box_btn_url';
                         }
-                        if (self::fill_link($settings, $title_key, $link_key, $source_id, $pages, $matches, $pending)) {
+                        $key = ($node['id'] ?? '') . ':' . $link_key;
+                        if (self::fill_link($settings, $title_key, $link_key, $source_id, $pages, $matches, $pending, $saved[$key] ?? null, $targets, $key, $adopt_legacy)) {
                             if ($type === 'jkit_icon_box') $settings['sg_readmore_enable_globallink'] = 'yes';
                             if ($type === 'elementskit-icon-box' && $link_key === 'ekit_icon_box_global_link') {
                                 $settings['ekit_icon_box_show_global_link'] = 'yes';
@@ -55,7 +60,8 @@ class WFEBPG_Title_Linker {
                         }
                     } elseif ($type === 'icon-list') {
                         foreach ($settings['icon_list'] ?? [] as $key => $item) {
-                            self::fill_link($settings['icon_list'][$key], 'text', 'link', $source_id, $pages, $matches, $pending);
+                            $tracking_key = ($node['id'] ?? '') . ':icon_list:' . ($item['_id'] ?? $key);
+                            self::fill_link($settings['icon_list'][$key], 'text', 'link', $source_id, $pages, $matches, $pending, $saved[$tracking_key] ?? null, $targets, $tracking_key, $adopt_legacy);
                         }
                     } else {
                         WFEBPG_Logger::log('Title link marker: unsupported widget ' . $type . ' on page ' . $source_id . '.', 'warning');
@@ -67,16 +73,34 @@ class WFEBPG_Title_Linker {
             unset($node);
         };
         $walk($elements);
+        if ($targets) update_post_meta($source_id, self::TARGETS_META, $targets);
+        else delete_post_meta($source_id, self::TARGETS_META);
         return $pending;
     }
 
-    private static function fill_link(&$settings, $title_key, $link_key, $source_id, &$pages, &$matches, &$pending) {
+    private static function fill_link(&$settings, $title_key, $link_key, $source_id, &$pages, &$matches, &$pending, $tracked, &$targets, $key, $adopt_legacy) {
         // Manual and dynamic links always take precedence. '#' is a placeholder.
         $link = $settings[$link_key] ?? [];
         if (!is_array($link) || !empty($settings['__dynamic__'][$link_key])) return false;
-        if (trim((string) ($link['url'] ?? '')) !== '' && trim((string) $link['url']) !== '#') return false;
         $title = self::title_text($settings[$title_key] ?? '');
-        $settings[$link_key] = array_merge($link, ['url'=>'']);
+        $current = trim((string) ($link['url'] ?? ''));
+        if (is_array($tracked) && $current === $tracked['url']) {
+            if ($title === $tracked['title']) {
+                $target = get_post($tracked['id']);
+                $url = $target && $target->post_type === 'page' && $target->post_status === 'publish'
+                    ? get_permalink($target->ID) : '';
+                $settings[$link_key]['url'] = $url ?: '';
+                $targets[$key] = array_merge($tracked, ['url'=>$url ?: '']);
+                if (!$url) $pending = true;
+                return true;
+            }
+            // A regenerated title needs a new match, rather than the previous target.
+            $current = '';
+        } elseif (is_array($tracked)) return false; // A manual edit releases ownership.
+        elseif ($current !== '' && $current !== '#' && !$adopt_legacy) return false;
+        $legacy_url = $current !== '' && $current !== '#' ? $current : '';
+        if ($title === '' && $legacy_url !== '') return false;
+        if ($legacy_url === '') $settings[$link_key] = array_merge($link, ['url'=>'']);
         if ($title === '') return false;
 
         if ($pages === null) {
@@ -93,20 +117,82 @@ class WFEBPG_Title_Linker {
                 if (preg_match($pattern, self::title_text($page->post_title)) === 1) $matches[$title][] = (int) $page->ID;
             }
             if (count($matches[$title]) > 1) {
-                WFEBPG_Logger::log('Ambiguous title link "' . $title . '" on page ' . $source_id . ': matching page IDs ' . implode(', ', $matches[$title]) . '. Link left blank.', 'warning');
+                WFEBPG_Logger::log('Ambiguous title link "' . $title . '" on page ' . $source_id . ': matching page IDs ' . implode(', ', $matches[$title]) . '. No target selected.', 'warning');
             }
         }
         if (count($matches[$title]) !== 1) {
+            if ($legacy_url !== '') {
+                WFEBPG_Logger::log('Existing title link on page ' . $source_id . ' left unchanged: no unique title match for "' . $title . '".', 'warning');
+                return false;
+            }
             $pending = true;
             return false;
         }
         $url = get_permalink($matches[$title][0]);
+        // Legacy links have no ownership record: adopt only a verified URL/title pair.
+        if ($legacy_url !== '' && $legacy_url !== $url) {
+            WFEBPG_Logger::log('Title link on page ' . $source_id . ' left unchanged: existing URL could not be verified for "' . $title . '".', 'warning');
+            return false;
+        }
         if (!$url) {
             $pending = true;
             return false;
         }
         $settings[$link_key]['url'] = $url;
+        $targets[$key] = ['id'=>(int)$matches[$title][0], 'url'=>$url, 'title'=>$title];
         return true;
+    }
+
+    /** Explicit refresh scans Elementor pages; automatic refresh scans tracked sources. */
+    public static function refresh_generated($adopt_legacy = false) {
+        // ponytail: scan source pages; add a reverse target index if site size makes this costly.
+        $ids = get_posts([
+            'post_type'=>'page', 'post_status'=>'any', 'posts_per_page'=>-1, 'fields'=>'ids',
+            'meta_key'=>$adopt_legacy ? '_elementor_data' : self::TARGETS_META,
+            'meta_compare'=>'EXISTS', 'orderby'=>'ID', 'order'=>'ASC',
+        ]);
+        $updated = 0;
+        $pages = null;
+        foreach ($ids as $id) {
+            if (!$adopt_legacy && !get_post_meta($id, self::TARGETS_META, true)) continue;
+            $raw = get_post_meta($id, '_elementor_data', true);
+            $elements = is_string($raw) ? json_decode($raw, true) : null;
+            if (!is_array($elements)) continue;
+            $before = $elements;
+            $pending = self::apply($elements, $id, $pages, $adopt_legacy);
+            if ($elements !== $before) {
+                $encoded = WFEBPG_Template::encode($elements);
+                update_post_meta($id, '_elementor_data', wp_slash($encoded));
+                delete_post_meta($id, '_elementor_element_cache');
+                clean_post_cache($id);
+                if (class_exists('\\Elementor\\Core\\Files\\CSS\\Post')) {
+                    (new \Elementor\Core\Files\CSS\Post($id))->delete();
+                }
+                $updated++;
+            }
+            self::remember_pending($id, $pending);
+        }
+        return $updated;
+    }
+
+    public static function page_saved($id, $post, $update, $before) {
+        if ($post->post_type !== 'page') return;
+        if ($before && $before->post_name === $post->post_name && (int)$before->post_parent === (int)$post->post_parent
+            && $before->post_status === $post->post_status) return;
+        self::schedule_refresh();
+    }
+
+    public static function page_deleted($id, $post) {
+        if ($post->post_type === 'page') self::schedule_refresh();
+    }
+
+    private static function schedule_refresh() {
+        // Coalesce bulk page updates and run after WordPress clears descendant caches.
+        static $scheduled = false;
+        if (!$scheduled) {
+            $scheduled = true;
+            add_action('shutdown', static function () { self::refresh_generated(); });
+        }
     }
 
     public static function remember_pending($page_id, $pending) {

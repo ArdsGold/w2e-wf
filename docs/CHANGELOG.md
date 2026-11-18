@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Expanded Refresh generated links to all Elementor pages, including manually created pages. Only marked supported widgets participate; blank links can be filled and verified existing links adopted. Tracked links on manual pages follow future target moves. Unmarked pages retain their exact Elementor data and manual pages keep their original classification.
+
+- Track generated title links by target page ID. Page slug, parent, and publication changes refresh tracked URLs, including descendants affected by a parent move. Manual overrides release tracking. Added a Page Generation action to refresh links and adopt verified legacy URL/title pairs; uncertain older URLs remain unchanged and are logged. Added regression coverage for moves, renames, publication changes, overrides, and legacy adoption.
+
+- Preserve phone widgets during automatic phone linking: buttons with existing native `tel:` links are skipped; other widgets are skipped when a native `tel:` destination matches a displayed number after format normalization. Existing HTML anchors and native URL settings remain unchanged. Ordinary unlinked numbers still receive underlined, inherited-color links. Added generator-level regression checks.
+
+- Fixed pure-Container structural repeat rows and added native Nested Accordion FAQ mapping (one widget, paired title/panel records, preserved styling and unique IDs). Added regression coverage using the Storefront template/DOCX. Validation and generation now report disabled Container/Nested Accordion support before a blank page can be saved.
+
+- Added Elementor Free marker inputs: an Advanced > Wolf Forge > Wolf Forge Marker control for widgets/containers/sections/columns, and recognized `wf-` CSS classes for all existing marker types and modifiers. Dedicated fields take priority over legacy attributes, followed by CSS markers. Exported JSON, validation, previews, repeats, and title linking use the shared parser. Consumed inline markers are cleared across all formats while preserving styling. Added input-equivalence and field/CSS queue-link regressions.
+
 ## r2.3.0 - 2026-11-18
 
 - Use the supplied `pluginIcon.png` for the plugin's dashboard menu icon, sized to fit the WordPress sidebar on all admin screens. Its URL includes the file modification time so replacing the image loads the new icon after a refresh.

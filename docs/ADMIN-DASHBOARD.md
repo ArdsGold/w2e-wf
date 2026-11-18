@@ -12,13 +12,19 @@ In Queue, click **Process All Queue Now** once to process the waiting jobs in su
 
 **Cancel Queue** removes all waiting jobs and stops this dashboard's manual loop. Any job already being generated finishes normally; generated pages and saved templates are not deleted. Cancellation is logged. New jobs can be queued afterward. If cancellation cannot be confirmed, the dashboard shows a retry message and enables the controls again.
 
-The right-side preview updates automatically when the template changes. It shows the Elementor structure, not a rendered screenshot. Hover over a marked element to view its `data-customID` marker. With no template selected, the preview is empty.
+The right-side preview updates automatically when the template changes. It shows the Elementor structure, not a rendered screenshot. Hover over a marked element to view its normalized marker. With no template selected, the preview is empty.
 
 Paragraph markers can populate Heading widgets as well as Text Editors. A section's sole marked H1/H2 is used as its scope even when the FAQ widget comes before that heading in the exported JSON. The visual layout stays in its original order. Regenerate existing pages to apply mapping fixes.
 
 Choose either a saved template or a new upload. To use an uploaded file as a saved template, add it to the library in Template Validator.
 
 The DOCX Compatibility box reports whether the site's PHP has `ZipArchive`. If it does not, the plugin enables the zip-free fallback for all administrators. The fallback requires PHP zlib.
+
+## Markers in Elementor Free
+
+Select a widget or structural element and open **Advanced > Wolf Forge > Wolf Forge Marker**. Enter values such as `h3|link`, `h3|p`, or `repeat`. The plugin must be active while editing to show this control. The value is saved with that element and exported with the template.
+
+You can instead use **Advanced > CSS Classes**, such as `wf-h3 wf-link`, alongside your styling classes. All existing marker types work through either input. The dedicated field takes priority when nonblank, followed by legacy attributes, then CSS classes. See [Marker System](MARKER-SYSTEM.md) for equivalent examples. No Elementor Pro subscription is required for these inputs.
 
 ## Automatic shared settings
 
@@ -64,7 +70,7 @@ A notification appears when a new page is generated. Open this tab to acknowledg
 
 Select or upload a template and choose **Preview & Validate Template** to see its structure and validation results. Add a DOCX to check marker and content compatibility.
 
-The preview shows the Elementor structure. Hover over a marked element to view its `data-customID` marker.
+The preview shows the Elementor structure. Hover over a marked element to view its normalized marker.
 
 Manage saved templates here. Uploading a template to the library does not generate a page. Renaming a template updates its image mappings; deleting it removes only the saved template.
 
@@ -85,3 +91,13 @@ Page Generation, Template Image Replacement, and Template Validator share the se
 - If an image is not replaced, confirm the mapping is saved for the selected template.
 
 For marker syntax and mapping rules, see [`MARKER-SYSTEM.md`](MARKER-SYSTEM.md). For installation and queue setup, see [`INSTALLATION.md`](INSTALLATION.md).
+
+## Refresh generated links
+
+In **Page Generation**, **Refresh generated links** scans all Elementor pages, including manually created pages, for supported widgets marked with `link`. It fills blank marked links using matching published titles. Unmarked widgets and non-Elementor pages remain unchanged. Manually created pages are not added to the generated-page table or given generated-page styling. Use the action to update tracked title links and identify older marked links with a verified matching title and current URL. New links follow target page IDs when slugs or parents change, including descendant URL changes. Manual overrides stop tracking. Unverified older URLs remain unchanged and appear in Logs. Clear the marked widget's link field and refresh again to match its title, or regenerate plugin-created pages from a template with blank link fields. A manually entered URL identical to the verified title/permalink pair can be adopted by this explicit action. Automatic updates preserve untracked populated URLs.
+
+## Phone links
+
+Automatic phone processing leaves Button widgets with an existing native `tel:` link untouched. For other widgets, it leaves their settings untouched when a native `tel:` destination matches a number in the widget's text. Matching handles punctuation, spaces, and an optional US +1 prefix; telephone URI extensions do not change the base-number match. Existing HTML anchors keep their original text, link, colors, and decoration.
+
+Unlinked numbers continue to become underlined phone links with inherited text color, including in buttons without a `tel:` link. These rules apply to phone processing after marker-based content mapping. Regenerate existing pages from their template to apply the new behavior; already-generated markup is not removed automatically.

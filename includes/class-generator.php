@@ -8,7 +8,7 @@ class WFEBPG_Generator {
     const H_ID = 'h3';
     const P_ID = 'p';
     const REPEAT_ID = 'repeatable';
-    const INTERNAL_REPEAT_WIDGETS = ['toggle', 'accordion'];
+    const INTERNAL_REPEAT_WIDGETS = ['toggle', 'accordion', 'nested-accordion'];
     const STEP_ID = 'step';
     const QUEUE_OPTION = 'wfebpg_queue';
     const QUEUE_LOCK_OPTION = 'wfebpg_queue_worker_lock';
@@ -719,6 +719,10 @@ class WFEBPG_Generator {
     private static function populate_internal_repeatable_widget(&$widget, $items) {
         $widget_type = strtolower((string) ($widget['widgetType'] ?? ''));
         if (!in_array($widget_type, self::INTERNAL_REPEAT_WIDGETS, true)) return;
+        if ($widget_type === 'nested-accordion') {
+            self::populate_nested_accordion($widget, $items);
+            return;
+        }
         $settings = isset($widget['settings']) && is_array($widget['settings']) ? $widget['settings'] : [];
         $tabs = [];
         foreach ((array) $items as $item) {
@@ -730,6 +734,35 @@ class WFEBPG_Generator {
         }
         $settings['tabs'] = $tabs;
         $widget['settings'] = $settings;
+    }
+
+    /** Nested Accordion stores titles in items and answers in child containers. */
+    private static function populate_nested_accordion(&$widget, $items) {
+        $prototypes = array_values((array) ($widget['settings']['items'] ?? []));
+        $panels = array_values((array) ($widget['elements'] ?? []));
+        $widget['settings']['items'] = [];
+        $widget['elements'] = [];
+        foreach (array_values((array) $items) as $i => $item) {
+            $row = $prototypes ? $prototypes[$i % count($prototypes)] : [];
+            $row['_id'] = self::new_element_id();
+            $row['item_title'] = (string) ($item['heading'] ?? '');
+            $widget['settings']['items'][] = $row;
+            $panel = $panels ? self::deep_clone_element($panels[$i % count($panels)])
+                : ['id'=>self::new_element_id(), 'elType'=>'container', 'settings'=>[], 'elements'=>[]];
+            $body = wpautop(implode("\n\n", (array) ($item['content'] ?? [])));
+            $written = false;
+            self::walk_mutate($panel['elements'], static function (&$node) use ($body, &$written) {
+                if (!$written && ($node['widgetType'] ?? '') === 'text-editor') {
+                    $node['settings']['editor'] = $body;
+                    $written = true;
+                }
+            });
+            if (!$written) $panel['elements'][] = [
+                'id'=>self::new_element_id(), 'elType'=>'widget', 'widgetType'=>'text-editor',
+                'settings'=>['editor'=>$body], 'elements'=>[],
+            ];
+            $widget['elements'][] = $panel;
+        }
     }
 
     private static function build_repeatable_items_for_scope($doc, $target_level, $scope_parent_level = 0, $scope_parent_ordinal = 0) {
@@ -887,32 +920,9 @@ class WFEBPG_Generator {
         $walk($elements);
     }
 
-    /** Remove the data-customID marker from a generated element. */
+    /** Remove consumed inline markers without exposing a lower-priority source. */
     private static function remove_custom_marker(&$element) {
-        if (!isset($element['settings']) || !is_array($element['settings'])) return;
-
-        foreach (['customID', 'custom_id', 'data-customID', 'data_customID'] as $key) {
-            unset($element[$key], $element['settings'][$key]);
-        }
-
-        foreach (['_attributes', 'custom_attributes', 'attributes'] as $key) {
-            if (!array_key_exists($key, $element['settings'])) continue;
-
-            $value = $element['settings'][$key];
-            if (is_string($value) && stripos(trim($value), 'data-customid|') === 0) {
-                unset($element['settings'][$key]);
-                continue;
-            }
-
-            if (is_array($value)) {
-                foreach ($value as $attribute => $attribute_value) {
-                    if (strtolower((string) $attribute) === 'data-customid') {
-                        unset($element['settings'][$key][$attribute]);
-                    }
-                }
-                if (!$element['settings'][$key]) unset($element['settings'][$key]);
-            }
-        }
+        WFEBPG_Template::clear_marker($element);
     }
 
     /** Populate every marked element belonging to one repeatable item. */
@@ -1964,13 +1974,14 @@ class WFEBPG_Generator {
         unset($el);
     }
 
-    /** Return the path of the nearest ancestor Elementor Section for a node. */
+    /** Prefer a legacy Section row; otherwise use the containing flex Container. */
     private static function nearest_section_path(&$elements, $node_path) {
         $path = array_values((array) $node_path);
         if (count($path) < 2) return null;
 
         $root =& $elements;
         $section_path = null;
+        $container_path = null;
         $current_path = [];
 
         foreach ($path as $index) {
@@ -1984,13 +1995,16 @@ class WFEBPG_Generator {
             if (($node['elType'] ?? '') === 'section') {
                 $section_path = $current_path;
             }
+            if (($node['elType'] ?? '') === 'container' && count($current_path) < count($path)) {
+                $container_path = $current_path;
+            }
 
             if (!isset($node['elements']) || !is_array($node['elements'])) break;
             $root =& $root[$index]['elements'];
         }
         unset($root);
 
-        return $section_path;
+        return $section_path ?? $container_path;
     }
 
     /**
@@ -2202,9 +2216,11 @@ class WFEBPG_Generator {
 
     private static function apply_phone_links(&$elements) {
         foreach ($elements as &$el) {
-            if (isset($el['settings']) && is_array($el['settings'])) {
+            if (isset($el['settings']) && is_array($el['settings']) && !WFEBPG_Phone_Linker::preserve_widget($el)) {
                 foreach ($el['settings'] as $key => $value) {
-                    if (is_string($value)) $el['settings'][$key] = WFEBPG_Phone_Linker::html($value);
+                    if (!is_string($value)) continue;
+                    if (preg_match('/(?:link|url|href)$/i', $key) && preg_match('/^\s*tel:/i', $value)) continue;
+                    $el['settings'][$key] = WFEBPG_Phone_Linker::html($value);
                 }
             }
             if (isset($el['elements']) && is_array($el['elements'])) {
@@ -2389,6 +2405,26 @@ class WFEBPG_Generator {
      * Analyze an Elementor template before generation. Used by the Template
      * Validator admin screen and intentionally kept read-only.
      */
+    /** Detect disabled native features before they produce an empty document. */
+    private static function runtime_template_errors(&$elements) {
+        if (!class_exists('\Elementor\Plugin') || !\Elementor\Plugin::$instance) return [];
+        $containers = false;
+        $nested = false;
+        self::walk_mutate($elements, static function (&$node) use (&$containers, &$nested) {
+            if (($node['elType'] ?? '') === 'container') $containers = true;
+            if (($node['widgetType'] ?? '') === 'nested-accordion') $nested = true;
+        });
+        $plugin = \Elementor\Plugin::$instance;
+        $errors = [];
+        if ($containers && !$plugin->elements_manager->get_element_types('container')) {
+            $errors[] = 'This template uses Elementor Containers, but Container support is disabled. Enable Container in Elementor Settings > Features before generating.';
+        }
+        if ($nested && !$plugin->widgets_manager->get_widget_types('nested-accordion')) {
+            $errors[] = 'This template uses Nested Accordion, but the widget is unavailable. Enable Containers and Nested Elements in Elementor Settings > Features before generating.';
+        }
+        return $errors;
+    }
+
     public static function validate_template_json($json, $doc = null) {
         $elements = WFEBPG_Template::decode($json);
         $counts = self::count_markers($elements);
@@ -2407,7 +2443,7 @@ class WFEBPG_Generator {
             'repeat_image_locations' => $repeat_image_locations,
             'doc' => null,
             'warnings' => [],
-            'errors' => [],
+            'errors' => self::runtime_template_errors($elements),
             'mapping_debug' => [],
         ];
 
@@ -2519,6 +2555,8 @@ class WFEBPG_Generator {
         if ($json === false) throw new Exception('Unable to read Elementor JSON template.');
 
         $elements = WFEBPG_Template::decode($json);
+        $feature_errors = self::runtime_template_errors($elements);
+        if ($feature_errors) throw new Exception(implode(' ', $feature_errors));
         $page_settings = WFEBPG_Template::page_settings($json);
         // The supplied raw Elementor export has an empty page_settings array.
         // Use Elementor's header/footer page layout so WordPress does not place
@@ -2622,6 +2660,8 @@ class WFEBPG_Generator {
 
         if (is_wp_error($id)) throw new Exception('Page creation failed: ' . $id->get_error_message());
 
+        // This is fresh template data, rather than the previously tracked widgets.
+        delete_post_meta($id, WFEBPG_Title_Linker::TARGETS_META);
         $title_links_pending = WFEBPG_Title_Linker::apply($elements, $id);
         $elementor_json = WFEBPG_Template::encode($elements);
 

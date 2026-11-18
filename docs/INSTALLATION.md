@@ -4,6 +4,12 @@
 
 r2.3.0 adds matching-title page links, underlined generated phone links, and the custom dashboard icon. Add `|link` to a supported title/link widget, such as `data-customID|h3|link`, to match published pages on the same site. Missing or duplicate matches stay blank; pending links retry after later page generations. Install the updated plugin files, then regenerate existing pages to apply new markers or phone-link styling. Saved preferences and existing templates remain compatible. See [RELEASE-r2.3.0.md](RELEASE-r2.3.0.md) for details.
 
+## Container and Nested Accordion templates
+
+Enable **Container** in Elementor Settings > Features when the uploaded JSON uses Container elements. For Nested Accordion FAQs, enable **Nested Elements** as well. These features are available in Elementor Free. If disabled, Elementor can render an empty document even though the plugin saved mapped text. The validator and generator now flag that mismatch before saving a new page.
+
+For an existing affected page, enable its required features, clear Elementor's element cache/rebuild its CSS, and regenerate if its repeat cards or FAQ need updating. Structural container cards use a heading marker for their titles and a `p` marker for their body Text Editor. Nested Accordion uses `h3|p|repeat` on the widget and keeps question/answer pairs inside one accordion.
+
 ## Requirements
 
 - WordPress 6.0 or newer.

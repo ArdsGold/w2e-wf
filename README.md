@@ -18,10 +18,12 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 
 - Generates WordPress pages from one reusable Elementor JSON template.
 - Reads normal DOCX Heading 1/2/3 styles and paragraphs.
-- Maps content with `data-customID` markers.
+- Maps content using an Elementor Free marker field, `wf-` CSS classes, or existing `data-customID` attributes.
 - Supports `|link` on supported title/link widgets to find matching published pages, including pages generated later in the queue.
+- Tracks generated link targets by page ID so links follow slug and parent changes. **Page Generation > Refresh generated links** scans all Elementor pages, including manually created pages, to fill blank marked links and adopt verified older links; uncertain URLs remain unchanged and are logged.
 - Shows the installed version and links to GitHub when the repository has a newer version.
 - Supports marked JKit Heading and Icon Box widgets, ElementsKit Heading titles/descriptions, and Flip Boxes with optional matching front/back headings and back-only paragraph content. Disable back-title copying to preserve the original template title.
+- Preserves native telephone-linked buttons and other widgets whose telephone link matches their displayed number.
 - Supports fixed and repeatable content blocks.
 - Offers **No limit** to keep each repeatable group together in one section.
 - Automatically remembers dashboard settings across refreshes and shares them across administrators.
@@ -29,12 +31,13 @@ The template's `data-customID` markers control where DOCX content appears. Your 
 - Structural repeat regions automatically shrink, expand, or disappear to match their scoped DOCX record count.
 - Existing `h3|repeat`, `h3|p|repeat`, and legacy `|repeatable` behavior remains supported.
 - Repeatable regions follow the document's heading hierarchy.
-- Supports repeatable parent containers and Elementor Toggle/Accordion items.
+- Supports repeatable parent containers and Elementor Toggle/Accordion/Nested Accordion items.
 - Remembers uploaded Elementor JSON templates.
 - Lets you map template images to Media Library images.
 - Supports an optional Media Library image pool for repeatable cards.
 - Processes large batches through a WP-Cron queue.
 - Regenerates Elementor CSS after page creation.
+- Reports disabled Container or Nested Accordion support before saving a template that Elementor cannot render.
 - Provides a Template Validator and Mapping Debugger.
 - Tracks generated pages in the New Pages tab, with review and Trash actions.
 
@@ -76,11 +79,13 @@ On first use, existing per-administrator template, image, and fallback preferenc
 
 Create the visual page in Elementor.
 
-Only elements with a `data-customID` marker receive content. Other elements remain unchanged.
+Only elements with a recognized Wolf Forge marker receive content. Use the dedicated field, prefixed CSS classes, or existing custom attributes.
 
 ### 2. Add markers
 
-Use **Elementor → Advanced → Attributes / Custom Attributes**.
+In Elementor Free, use **Advanced > Wolf Forge > Wolf Forge Marker** and enter a value such as `h3|link`. Alternatively, add **Advanced > CSS Classes** such as `wf-h3 wf-link`, alongside your styling classes. Existing **Attributes / Custom Attributes** markers remain supported.
+
+All marker types, repeats, and links work with either input. A nonblank dedicated field takes priority over attributes, which take priority over CSS classes. See [Marker System](docs/MARKER-SYSTEM.md) for the complete mapping and examples.
 
 Basic markers:
 
@@ -333,6 +338,7 @@ wolf-forge-elementor-page-generator/
 │   └── RELEASE-r2.3.0.md
 ├── includes/
 │   ├── admin-settings.php
+│   ├── elementor-markers.php
 │   ├── version-check.php
 │   ├── class-docx-reader.php
 │   ├── class-generator.php
@@ -343,12 +349,16 @@ wolf-forge-elementor-page-generator/
 ├── tests/
 │   ├── admin-settings.js
 │   ├── admin-settings.php
+│   ├── container-and-nested-accordion.php
+│   ├── marker-inputs.php
 │   ├── generation-mapping.php
 │   ├── repeatable-limit.php
 │   ├── generator-options.php
 │   ├── repeatable-layout.php
 │   ├── widget-compatibility.php
 │   ├── title-linker.php
+│   ├── title-link-refresh.php
+│   ├── phone-widget-preservation.php
 │   ├── phone-linker.php
 │   ├── queue-worker.php
 │   ├── queue-processing.js

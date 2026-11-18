@@ -51,6 +51,16 @@ add_action('admin_post_wfebpg_process_queue_now','wfebpg_process_queue_now');
 add_action('wp_ajax_wfebpg_process_queue_now','wfebpg_process_queue_now');
 add_action('wp_ajax_wfebpg_cancel_queue','wfebpg_cancel_queue');
 add_action('admin_post_wfebpg_clear_logs','wfebpg_clear_logs');
+add_action('admin_post_wfebpg_refresh_links', 'wfebpg_refresh_links');
+
+function wfebpg_refresh_links() {
+    if (!current_user_can('manage_options')) wp_die('Unauthorized.');
+    check_admin_referer('wfebpg_refresh_links');
+    $updated = WFEBPG_Title_Linker::refresh_generated(true);
+    WFEBPG_Logger::log('Generated link refresh completed: ' . $updated . ' page(s) updated. Unverified existing URLs were left unchanged.', 'info');
+    wp_safe_redirect(add_query_arg('wfebpg_links_updated', $updated, admin_url('admin.php?page=wfebpg')));
+    exit;
+}
 add_action('admin_post_wfebpg_reset_generated','wfebpg_reset_generated');
 add_action('admin_post_wfebpg_trash_generated','wfebpg_trash_generated');
 add_action('admin_post_wfebpg_clear_templates','wfebpg_clear_templates');
@@ -190,7 +200,7 @@ function wfebpg_admin(){
                     </div>
                     <input type="hidden" name="saved_template_choice" id="wfebpg-saved-template-choice" value="">
                     <p id="wfebpg-template-source-status" class="description">Select a saved template or upload a JSON file. Use one source at a time.</p>
-                    <p class="description">Only elements marked with <code>data-customID</code> receive content. Other elements stay unchanged.</p>
+                    <p class="description">Mark elements using Advanced &rarr; Wolf Forge Marker, CSS Classes such as <code>wf-h3 wf-link</code>, or existing <code>data-customID</code> attributes. Only marked elements receive content.</p>
                     <?php if (!empty($saved_templates)): ?>
                         <p><a class="button button-link-delete" href="<?php echo esc_url($clear_templates_url); ?>" onclick="return confirm('Clear all remembered Elementor JSON templates? This does not affect templates already copied into queued jobs.');">Clear Saved JSON Templates</a></p>
                     <?php endif; ?>
@@ -223,6 +233,13 @@ function wfebpg_admin(){
             <p><button type="submit" class="button button-primary button-hero">Queue Pages</button> <button type="button" class="button" id="wfebpg-stop-queueing" style="display:none;border-color:#b32d2e;color:#b32d2e">Stop Queueing</button> <span id="wfebpg-queue-status" class="description"></span></p>
         </form>
         <hr>
+        <h2>Generated links</h2>
+        <p>Refresh scans all Elementor pages, including manually created pages, for supported widgets marked with link. Blank links are matched to published page titles; existing links are tracked only when their title and URL identify the same page. Tracked links follow target slug or parent changes. Unverified URLs stay unchanged; see Logs for details.</p>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <input type="hidden" name="action" value="wfebpg_refresh_links"><?php wp_nonce_field('wfebpg_refresh_links'); ?>
+            <button type="submit" class="button">Refresh generated links</button>
+        </form>
+        <?php if (isset($_GET['wfebpg_links_updated'])): ?><p role="status"><?php echo absint($_GET['wfebpg_links_updated']); ?> page(s) updated. Verified older links are now tracked. Check Logs for links needing review.</p><?php endif; ?>
         <h2>Queue</h2><p><strong id="wfebpg-queue-remaining"><?php echo count($q);?></strong> job(s) waiting.</p>
         <?php $next_cron=wp_next_scheduled('wfebpg_process_queue'); if($next_cron): ?>
             <p class="description">Next WP-Cron run: <?php echo esc_html(wp_date(get_option('date_format').' '.get_option('time_format'),$next_cron)); ?></p>
@@ -329,7 +346,7 @@ function wfebpg_admin(){
         if (isset($result) && $result):
         ?>
             <div class="wfebpg-validator-grid">
-                <div class="wfebpg-validator-card"><h2>Content Markers</h2><p class="description">Counts include normalized <code>data-customID|type|flags</code> markers.</p><?php foreach ($result['counts'] as $key=>$count): ?><div class="wfebpg-check-row"><span><?php echo esc_html($key); ?></span><strong><?php echo absint($count); ?></strong></div><?php endforeach; ?></div>
+                <div class="wfebpg-validator-card"><h2>Content Markers</h2><p class="description">Counts include dedicated marker fields, <code>wf-</code> CSS classes, and legacy custom attributes.</p><?php foreach ($result['counts'] as $key=>$count): ?><div class="wfebpg-check-row"><span><?php echo esc_html($key); ?></span><strong><?php echo absint($count); ?></strong></div><?php endforeach; ?></div>
                 <div class="wfebpg-validator-card"><h2>Repeatable Structure</h2><div class="wfebpg-check-row"><span>Repeatable sections</span><strong><?php echo absint($result['repeat_sections']); ?></strong></div><div class="wfebpg-check-row"><span>Repeatable card columns with images</span><strong><?php echo absint($result['repeat_columns']); ?></strong></div><div class="wfebpg-check-row"><span>Image/background locations</span><strong><?php echo absint($result['image_locations']); ?></strong></div><div class="wfebpg-check-row"><span>Images inside repeatable sections</span><strong><?php echo absint($result['repeat_image_locations']); ?></strong></div></div>
                 <?php if ($result['doc']): ?><div class="wfebpg-validator-card"><h2>DOCX Compatibility</h2><p class="description">DOCX headings use Word's Heading 1/2/3 styles; body text uses normal paragraphs.</p><?php foreach ($result['doc'] as $key=>$value): ?><div class="wfebpg-check-row"><span><?php echo esc_html(strtoupper($key)); ?></span><strong><?php echo absint($value); ?></strong></div><?php endforeach; ?></div><?php endif; ?>
             </div>

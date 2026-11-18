@@ -35,6 +35,7 @@ function is_wp_error($value) { return false; }
 function wp_json_encode($value, $flags = 0) { return json_encode($value, $flags); }
 function wp_slash($value) { return $value; }
 function update_post_meta($id, $key, $value) {}
+function get_post_meta($id, $key, $single) { return ''; }
 function clean_post_cache($id) {}
 function delete_post_meta($id, $key) {}
 function get_posts($args) { return []; }

@@ -20,7 +20,9 @@ if (!defined('ABSPATH')) exit;
  *     data-customID|h2|repeat      -> repeatable H2 slot (canonical)
  *     data-customID|h2|repeatable  -> legacy spelling accepted for compatibility
  *
- * Elements without a customID marker are never populated by the generator.
+ * Elementor Free alternatives: Advanced > Wolf Forge Marker (h3|link),
+ * or CSS Classes (wf-h3 wf-link). All formats share the same marker parser.
+ * Elements without a recognized marker are never populated by the generator.
  * Legacy marker names remain readable so existing templates continue to work.
  */
 class WFEBPG_Template {
@@ -72,6 +74,8 @@ class WFEBPG_Template {
         // instead of only the value portion "h2|repeatable".
         if (stripos($raw, 'data-customid|') === 0) {
             $raw = substr($raw, strlen('data-customID|'));
+        } elseif (stripos($raw, 'data-customid=') === 0) {
+            $raw = trim(substr($raw, strlen('data-customID=')), " \t\"'");
         }
 
         $parts = array_values(array_filter(array_map('trim', explode('|', $raw)), static function ($part) {
@@ -137,58 +141,107 @@ class WFEBPG_Template {
         return array_values(array_unique($levels));
     }
 
+    /** Field first, legacy attributes second, prefixed CSS classes last. */
     private static function raw_custom_id($el) {
         $settings = isset($el['settings']) && is_array($el['settings']) ? $el['settings'] : [];
-        $candidates = [];
+        $field = $settings['wfebpg_marker'] ?? '';
+        if (is_string($field) && trim($field) !== '') return trim($field);
 
         foreach (['customID', 'custom_id', 'data-customID', 'data_customID'] as $key) {
-            if (isset($el[$key])) $candidates[] = $el[$key];
-            if (isset($settings[$key])) $candidates[] = $settings[$key];
+            foreach ([$el[$key] ?? '', $settings[$key] ?? ''] as $value) {
+                if (is_string($value) && trim($value) !== '') return trim($value);
+            }
+        }
+        foreach (['_attributes', 'custom_attributes', 'attributes'] as $key) {
+            $value = $settings[$key] ?? '';
+            if (is_array($value)) {
+                $lines = [];
+                foreach ($value as $attribute => $content) {
+                    if (!is_string($content)) continue;
+                    $lines[] = strtolower((string) $attribute) === 'data-customid'
+                        ? 'data-customID|' . $content : $content;
+                }
+                $value = implode("\n", $lines);
+            }
+            if (!is_string($value)) continue;
+            foreach (preg_split('/\R/', $value) as $line) {
+                if (preg_match('/^\s*data-customid[|=](.*)$/i', $line, $match)) {
+                    $raw = trim($match[1], " \t\"'");
+                    if ($raw !== '') return $raw;
+                }
+            }
+            // Older JSON may store the value without its attribute name.
+            $first = strtolower(trim(explode('|', trim($value))[0]));
+            if (self::marker_token($first)) return trim($value);
         }
 
-        foreach (['_attributes', 'custom_attributes', 'attributes'] as $key) {
-            if (!isset($settings[$key])) continue;
+        $tokens = [];
+        foreach (['_css_classes', 'css_classes'] as $key) {
+            if (!isset($settings[$key]) || !is_string($settings[$key])) continue;
+            foreach (preg_split('/\s+/', trim($settings[$key])) as $class) {
+                if (self::css_marker_class($class)) $tokens[] = strtolower(substr($class, 3));
+            }
+        }
+        $tokens = array_values(array_unique($tokens));
+        if (!$tokens) return '';
+        // Heading/content tokens win over modifiers, regardless of class order.
+        $primary = null;
+        foreach ($tokens as $token) {
+            $type = self::LEGACY_TYPES[$token] ?? $token;
+            if (preg_match('/^h[1-9][0-9]*$/', $type) || $type === 'step') { $primary = $token; break; }
+        }
+        foreach (['p', 'repeat', 'repeatable', 'link'] as $type) {
+            if ($primary !== null) break;
+            foreach ($tokens as $token) {
+                if ((self::LEGACY_TYPES[$token] ?? $token) === $type) { $primary = $token; break; }
+            }
+        }
+        return implode('|', array_merge([$primary], array_values(array_diff($tokens, [$primary]))));
+    }
 
-            if (is_string($settings[$key])) {
-                $candidates[] = $settings[$key];
-            } elseif (is_array($settings[$key])) {
-                foreach ($settings[$key] as $attribute => $value) {
-                    // Elementor commonly stores attributes as key => value.
-                    // Preserve the key when it is the customID attribute.
-                    if (strtolower((string) $attribute) === 'data-customid') {
-                        $candidates[] = 'data-customID|' . (string) $value;
-                    } elseif (is_string($value)) {
-                        $candidates[] = $attribute . '|' . $value;
-                    } else {
-                        $candidates[] = $attribute;
+    private static function marker_token($token) {
+        return preg_match('/^h[1-9][0-9]*$/', $token)
+            || in_array($token, ['p', 'step', 'repeat', 'repeatable', 'link'], true)
+            || isset(self::LEGACY_TYPES[$token]);
+    }
+
+    private static function css_marker_class($class) {
+        return stripos($class, 'wf-') === 0 && self::marker_token(strtolower(substr($class, 3)));
+    }
+
+    /** Clear every marker source after consuming an inline repeat; retain styling. */
+    public static function clear_marker(&$element) {
+        if (!isset($element['settings']) || !is_array($element['settings'])) return;
+        unset($element['settings']['wfebpg_marker']);
+        foreach (['customID', 'custom_id', 'data-customID', 'data_customID'] as $key) {
+            unset($element[$key], $element['settings'][$key]);
+        }
+        foreach (['_css_classes', 'css_classes'] as $key) {
+            if (!isset($element['settings'][$key]) || !is_string($element['settings'][$key])) continue;
+            $classes = preg_split('/\s+/', trim($element['settings'][$key]));
+            $element['settings'][$key] = implode(' ', array_filter($classes, static function ($class) {
+                return !self::css_marker_class($class);
+            }));
+        }
+        foreach (['_attributes', 'custom_attributes', 'attributes'] as $key) {
+            if (!isset($element['settings'][$key])) continue;
+            $value = $element['settings'][$key];
+            if (is_string($value)) {
+                $lines = array_filter(preg_split('/\R/', $value), static function ($line) {
+                    $first = strtolower(trim(explode('|', trim($line))[0]));
+                    return !preg_match('/^\s*data-customid[|=]/i', $line) && !self::marker_token($first);
+                });
+                if ($lines) $element['settings'][$key] = implode("\n", $lines);
+                else unset($element['settings'][$key]);
+            } elseif (is_array($value)) {
+                foreach ($value as $attribute => $content) {
+                    if (strtolower((string) $attribute) === 'data-customid'
+                        || (is_string($content) && preg_match('/^\s*data-customid[|=]/i', $content))) {
+                        unset($element['settings'][$key][$attribute]);
                     }
                 }
             }
         }
-
-        foreach ($candidates as $candidate) {
-            $candidate = trim((string) $candidate);
-            if ($candidate === '') continue;
-
-            if (stripos($candidate, 'data-customid|') === 0) {
-                return trim(substr($candidate, strlen('data-customID|')));
-            }
-
-            if (stripos($candidate, 'data-customid=') === 0) {
-                return trim(trim(substr($candidate, strlen('data-customID='))), " \t\"'");
-            }
-
-            // If this came from Elementor's key/value representation, the
-            // first pipe separates the attribute name from its value.
-            if (strpos($candidate, '|') !== false) {
-                $parts = explode('|', $candidate, 2);
-                if (strtolower(trim($parts[0])) === 'data-customid') return trim($parts[1]);
-            }
-
-            return $candidate;
-        }
-
-        return '';
     }
 
     private static function walk($elements, $callback) {

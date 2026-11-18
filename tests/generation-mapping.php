@@ -15,6 +15,7 @@ function get_page_by_path($path, $output, $type) { return null; }
 function wp_insert_post($post, $error) { return 123; }
 function is_wp_error($value) { return false; }
 function update_post_meta($id, $key, $value) { $GLOBALS['saved_meta'][$key] = $value; }
+function get_post_meta($id, $key, $single) { return $GLOBALS['saved_meta'][$key] ?? ''; }
 function clean_post_cache($id) {}
 function delete_post_meta($id, $key) {}
 function get_posts($args) { return []; }
